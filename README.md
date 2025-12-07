@@ -1,72 +1,72 @@
 # Face Emotion Recognition Realtime
 
-**Developed by Matheus Siqueira**
+**Desenvolvido por Matheus Siqueira**
 
-## Project Overview
+## Visão Geral do Projeto
 
-This project implements a real-time facial emotion recognition system using Python. It leverages Computer Vision techniques and Deep Learning models to capture video from a webcam, detect faces, and classify emotional expressions (such as happiness, sadness, neutrality, and anger) with high accuracy.
+Este projeto implementa um sistema de reconhecimento de emoções faciais em tempo real utilizando Python. Ele utiliza técnicas de Visão Computacional e modelos de Deep Learning para capturar vídeo de uma webcam, detectar rostos e classificar expressões emocionais (como felicidade, tristeza, neutralidade e raiva) com alta precisão.
 
-The system is designed to be robust and easy to deploy, featuring automatic environment setup and video recording capabilities.
+O sistema foi projetado para ser robusto e de fácil implantação, contando com configuração automática de ambiente e capacidade de gravação de vídeo.
 
-## Key Features
+## Principais Funcionalidades
 
-- **Real-time Face Detection**: Utilizes OpenCV Haar Cascades for efficient face tracking.
-- **Emotion Classification**: Integrates the DeepFace library to analyze facial attributes and predict emotions.
-- **Live Visualization**: Overlays bounding boxes, emotion labels, and confidence percentages on the video feed.
-- **Session Recording**: Automatically records the session and saves it as `output_preview.avi`.
-- **Fault Tolerance**: Includes fallback mechanisms for model loading and detection resources.
+- **Detecção Facial em Tempo Real**: Utiliza Haar Cascades do OpenCV para rastreamento facial eficiente.
+- **Classificação de Emoções**: Integra a biblioteca DeepFace para analisar atributos faciais e prever emoções.
+- **Visualização Ao Vivo**: Exibe caixas delimitadoras, rótulos de emoção e porcentagens de confiança sobre o vídeo.
+- **Gravação de Sessão**: Grava automaticamente a sessão e a salva como `output_preview.avi`.
+- **Tolerância a Falhas**: Inclui mecanismos de fallback para carregamento de modelos e recursos de detecção.
 
-## Technologies Used
+## Tecnologias Utilizadas
 
-- **Language**: Python 3.11
-- **Computer Vision**: OpenCV (cv2)
+- **Linguagem**: Python 3.11
+- **Visão Computacional**: OpenCV (cv2)
 - **Deep Learning**: DeepFace, TensorFlow/Keras
-- **Automation**: Batch scripting for environment management
+- **Automação**: Scripts em lote (batch) para gerenciamento de ambiente
 
-## Prerequisites
+## Pré-requisitos
 
-- Python 3.11 is recommended for optimal compatibility with OpenCV and TensorFlow on Windows systems.
-- A functional webcam.
+- Python 3.11 é recomendado para compatibilidade ideal com OpenCV e TensorFlow em sistemas Windows.
+- Uma webcam funcional.
 
-## Installation and Setup
+## Instalação e Configuração
 
-### Automated Setup (Recommended)
+### Configuração Automática (Recomendado)
 
-1. Navigate to the project folder.
-2. Double-click the `run.bat` script.
-   - This script will automatically create the virtual environment, install all dependencies, and launch the application.
+1. Navegue até a pasta do projeto.
+2. Clique duas vezes no script `run.bat`.
+   - Este script criará automaticamente o ambiente virtual, instalará todas as dependências e iniciará a aplicação.
 
-### Manual Installation
+### Instalação Manual
 
-If you prefer to configure the environment manually:
+Se preferir configurar o ambiente manualmente:
 
-1. Create a virtual environment using Python 3.11:
+1. Crie um ambiente virtual usando Python 3.11:
    ```powershell
    py -3.11 -m venv .venv
    ```
 
-2. Activate the virtual environment:
+2. Ative o ambiente virtual:
    ```powershell
    .\.venv\Scripts\Activate
    ```
 
-3. Install the required dependencies:
+3. Instale as dependências necessárias:
    ```powershell
    pip install -r requirements.txt
    ```
 
-## Usage
+## Uso
 
-To run the application via terminal:
+Para executar a aplicação via terminal:
 
 ```powershell
 python main.py
 ```
 
-### Controls
+### Controles
 
-- **Esc**: Press the 'Esc' key to close the application window and save the recording.
+- **Esc**: Pressione a tecla 'Esc' para fechar a janela da aplicação e salvar a gravação.
 
-## Output
+## Saída
 
-The application generates a video file named `output_preview.avi` in the project root directory, containing the recorded session with all visual overlays.
+A aplicação gera um arquivo de vídeo chamado `output_preview.avi` no diretório raiz do projeto, contendo a sessão gravada com todas as sobreposições visuais.
