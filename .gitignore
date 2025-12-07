@@ -1,0 +1,11 @@
+__pycache__/
+.venv/
+*.avi
+*.mp4
+*.xml
+# Keep the manually downloaded/needed XML if desired, but usually we ignore large binaries. 
+# However, for this project to be portable, we might want to track the XML if it's small (<1MB) or ignore it.
+# The user wants to push the project, let's keep the XML if it's important fix.
+# But generally standard is to ignore. The code redownloads it. Let's ignore it to keep repo clean.
+haarcascade_frontalface_default.xml
+.vscode/
