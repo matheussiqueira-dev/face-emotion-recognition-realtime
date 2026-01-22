@@ -14,7 +14,9 @@ O sistema foi projetado para ser robusto e de fácil implantação, contando com
 - **Classificação de Emoções**: Integra a biblioteca DeepFace para analisar atributos faciais e prever emoções.
 - **Visualização Ao Vivo**: Exibe caixas delimitadoras, rótulos de emoção e porcentagens de confiança sobre o vídeo.
 - **Gravação de Sessão**: Grava automaticamente a sessão e a salva como `output_preview.avi`.
-- **Tolerância a Falhas**: Inclui mecanismos de fallback para carregamento de modelos e recursos de detecção.
+- **Performance e Estabilidade**: Detecção em escala reduzida, tracking leve e throttling de inferência por face.
+- **Tolerância a Falhas**: Fallback para cascades locais/instaladas e execução sem DeepFace quando indisponível.
+- **CLI Profissional**: Parâmetros para câmera, resolução, gravação, headless e logging.
 
 ## Tecnologias Utilizadas
 
@@ -63,6 +65,24 @@ Para executar a aplicação via terminal:
 python main.py
 ```
 
+### Opções principais
+
+- `--camera 0`: Seleciona o índice da câmera.
+- `--width 1280 --height 720`: Define resolução.
+- `--no-record`: Desativa gravação.
+- `--output caminho.avi`: Define caminho de saída.
+- `--no-display`: Executa sem janela (modo headless).
+- `--max-frames 300`: Para após N frames.
+- `--detect-scale 0.5`: Escala da imagem para detecção (performance).
+- `--log-level DEBUG`: Logs detalhados.
+
+Exemplos:
+
+```powershell
+python main.py --camera 1 --width 1280 --height 720 --output output.avi
+python main.py --no-display --max-frames 300 --log-level DEBUG
+```
+
 ### Controles
 
 - **Esc**: Pressione a tecla 'Esc' para fechar a janela da aplicação e salvar a gravação.
@@ -70,3 +90,8 @@ python main.py
 ## Saída
 
 A aplicação gera um arquivo de vídeo chamado `output_preview.avi` no diretório raiz do projeto, contendo a sessão gravada com todas as sobreposições visuais.
+
+## Observações
+
+- O Haar Cascade pode ser informado via `--cascade`. Caso não seja fornecido, o sistema procura no diretório do projeto ou no caminho padrão do OpenCV.
+- Se o DeepFace não estiver disponível, a aplicação continua rodando com detecção facial (sem análise de emoções).
