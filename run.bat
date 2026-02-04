@@ -1,27 +1,27 @@
 @echo off
+setlocal enabledelayedexpansion
 cd /d "%~dp0"
-echo Starting Face Emotion Recognition...
+
+echo ==========================================
+echo       EmotionAI - Senior Experience
+echo ==========================================
 
 if not exist .venv (
-    echo Virtual environment not found. Creating...
+    echo [1/3] Creating virtual environment...
     python -m venv .venv
-    echo Installing dependencies...
+    echo [2/3] Installing dependencies...
     call .\.venv\Scripts\activate.bat
     python -m pip install -r requirements.txt
 ) else (
     call .\.venv\Scripts\activate.bat
 )
 
-if %errorlevel% neq 0 (
-    echo Error activating virtual environment.
-    pause
-    exit /b %errorlevel%
-)
+echo [3/3] Starting EmotionAI Dashboard...
+echo Dashboard will be available at http://127.0.0.1:8000
+python run_api.py %*
 
-python main.py %*
 if %errorlevel% neq 0 (
-    echo Application exited with error.
+    echo.
+    echo [ERROR] Application exited with error code %errorlevel%
     pause
-) else (
-    echo Application finished.
 )
