@@ -1,97 +1,95 @@
-# Face Emotion Recognition Realtime
+# EmotionAI: Real-time Face Emotion Recognition
 
-**Desenvolvido por Matheus Siqueira**
+![Python](https://img.shields.io/badge/Python-3.8+-blue.svg?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?style=for-the-badge&logo=fastapi&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-4.0+-green.svg?style=for-the-badge&logo=opencv&logoColor=white)
+![DeepFace](https://img.shields.io/badge/DeepFace-AI%20Analysis-orange.svg?style=for-the-badge)
 
-## Visão Geral do Projeto
+**EmotionAI** is a high-performance, real-time facial emotion recognition system. It combines a robust Python backend leveraging OpenCV and DeepFace with a state-of-the-art web dashboard for real-time analytics and visualization.
 
-Este projeto implementa um sistema de reconhecimento de emoções faciais em tempo real utilizando Python. Ele utiliza técnicas de Visão Computacional e modelos de Deep Learning para capturar vídeo de uma webcam, detectar rostos e classificar expressões emocionais (como felicidade, tristeza, neutralidade e raiva) com alta precisão.
+---
 
-O sistema foi projetado para ser robusto e de fácil implantação, contando com configuração automática de ambiente e capacidade de gravação de vídeo.
+## 🌟 Features
 
-## Principais Funcionalidades
+- **Real-time Detection & Tracking**: Advanced face detection using Haar Cascades with persistent ID tracking across frames.
+- **Deep Emotion Analysis**: Powered by DeepFace, detecting 7 core emotions: *Happy, Sad, Angry, Surprise, Neutral, Fear, and Disgust*.
+- **Modern Web Dashboard**: A premium, glassmorphism-inspired UI for live monitoring.
+- **Real-time Analytics**: Dynamic charts showing emotion distribution and sentiment timeline.
+- **High Performance**: Asynchronous processing with FastAPI and WebSockets for low-latency streaming.
+- **Session Management**: Automated recording and session analysis (configurable).
 
-- **Detecção Facial em Tempo Real**: Utiliza Haar Cascades do OpenCV para rastreamento facial eficiente.
-- **Classificação de Emoções**: Integra a biblioteca DeepFace para analisar atributos faciais e prever emoções.
-- **Visualização Ao Vivo**: Exibe caixas delimitadoras, rótulos de emoção e porcentagens de confiança sobre o vídeo.
-- **Gravação de Sessão**: Grava automaticamente a sessão e a salva como `output_preview.avi`.
-- **Performance e Estabilidade**: Detecção em escala reduzida, tracking leve e throttling de inferência por face.
-- **Tolerância a Falhas**: Fallback para cascades locais/instaladas e execução sem DeepFace quando indisponível.
-- **CLI Profissional**: Parâmetros para câmera, resolução, gravação, headless e logging.
+## 🛠️ Tech Stack
 
-## Tecnologias Utilizadas
+- **Backend**: Python 3.8+, FastAPI, OpenCV, NumPy, DeepFace, TensorFlow/Keras.
+- **Frontend**: Vanilla HTML5, Modern CSS (Glassmorphism), JavaScript (ES6+), Chart.js.
+- **Communication**: WebSockets (Bi-directional real-time data).
 
-- **Linguagem**: Python 3.11
-- **Visão Computacional**: OpenCV (cv2)
-- **Deep Learning**: DeepFace, TensorFlow/Keras
-- **Automação**: Scripts em lote (batch) para gerenciamento de ambiente
+## 🚀 Getting Started
 
-## Pré-requisitos
+### Prerequisites
 
-- Python 3.11 é recomendado para compatibilidade ideal com OpenCV e TensorFlow em sistemas Windows.
-- Uma webcam funcional.
+- Python 3.8 or higher.
+- A functional webcam.
 
-## Instalação e Configuração
+### Installation & Run
 
-### Configuração Automática (Recomendado)
-
-1. Navegue até a pasta do projeto.
-2. Clique duas vezes no script `run.bat`.
-   - Este script criará automaticamente o ambiente virtual, instalará todas as dependências e iniciará a aplicação.
-
-### Instalação Manual
-
-Se preferir configurar o ambiente manualmente:
-
-1. Crie um ambiente virtual usando Python 3.11:
-   ```powershell
-   py -3.11 -m venv .venv
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/matheussiqueira-dev/face-emotion-recognition.git
+   cd face-emotion-recognition
    ```
 
-2. Ative o ambiente virtual:
-   ```powershell
-   .\.venv\Scripts\Activate
+2. **Run the application**:
+   Simply execute the provided batch file (Windows):
+   ```bash
+   run.bat
    ```
-
-3. Instale as dependências necessárias:
-   ```powershell
+   Or manually:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # Or .venv\Scripts\activate on Windows
    pip install -r requirements.txt
+   python run_api.py
    ```
 
-## Uso
+3. **Access the Dashboard**:
+   Open your browser and navigate to: `http://127.0.0.1:8000`
 
-Para executar a aplicação via terminal:
+---
 
-```powershell
-python main.py
+## 📂 Project Structure
+
+```text
+├── app/
+│   ├── backend/          # FastAPI API and WebSocket logic
+│   ├── core/             # Core processing (detection, tracking, analysis)
+│   └── frontend/         # Web dashboard (HTML, CSS, JS)
+├── run.bat               # One-click startup script
+├── run_api.py            # Entry point for the web server
+└── requirements.txt      # Project dependencies
 ```
 
-### Opções principais
+---
 
-- `--camera 0`: Seleciona o índice da câmera.
-- `--width 1280 --height 720`: Define resolução.
-- `--no-record`: Desativa gravação.
-- `--output caminho.avi`: Define caminho de saída.
-- `--no-display`: Executa sem janela (modo headless).
-- `--max-frames 300`: Para após N frames.
-- `--detect-scale 0.5`: Escala da imagem para detecção (performance).
-- `--log-level DEBUG`: Logs detalhados.
+## 🛠️ Configuration
 
-Exemplos:
+You can customize the application behavior in `app/core/config.py`:
+- `video_source`: Change between camera index (0, 1...) or a video file path.
+- `emotion_interval`: Frequency of emotion analysis (seconds).
+- `detect_scale`: Resolution scaling for faster detection.
 
-```powershell
-python main.py --camera 1 --width 1280 --height 720 --output output.avi
-python main.py --no-display --max-frames 300 --log-level DEBUG
-```
+## 📈 Future Improvements
 
-### Controles
+- [ ] Support for multiple detection backends (MediaPipe, MTCNN).
+- [ ] Export session data to PDF/CSV reports.
+- [ ] Multi-camera support.
+- [ ] User authentication and cloud sync.
 
-- **Esc**: Pressione a tecla 'Esc' para fechar a janela da aplicação e salvar a gravação.
+---
 
-## Saída
+## 🤝 Contributing
 
-A aplicação gera um arquivo de vídeo chamado `output_preview.avi` no diretório raiz do projeto, contendo a sessão gravada com todas as sobreposições visuais.
+Contributions are welcome! Feel free to open issues or submit pull requests.
 
-## Observações
-
-- O Haar Cascade pode ser informado via `--cascade`. Caso não seja fornecido, o sistema procura no diretório do projeto ou no caminho padrão do OpenCV.
-- Se o DeepFace não estiver disponível, a aplicação continua rodando com detecção facial (sem análise de emoções).
+Autoria: Matheus Siqueira  
+Website: [https://www.matheussiqueira.dev/](https://www.matheussiqueira.dev/)

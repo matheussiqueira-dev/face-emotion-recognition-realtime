@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EmotionAI | Real-time Face Emotion Recognition</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon"></div>
+                <h1>Emotion<span>AI</span></h1>
+            </div>
+            
+            <nav class="stats-panel">
+                <div class="stat-card">
+                    <span class="stat-label">System Status</span>
+                    <span class="stat-value pulse" id="status">Connecting...</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Active Tracks</span>
+                    <span class="stat-value" id="track-count">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Inference FPS</span>
+                    <span class="stat-value" id="fps-value">0.0</span>
+                </div>
+            </nav>
+
+            <div class="emotion-distribution">
+                <h3>Emotion Distribution</h3>
+                <canvas id="distributionChart"></canvas>
+            </div>
+
+            <div class="footer-info">
+                <p>Designed by Matheus Siqueira</p>
+                <a href="https://www.matheussiqueira.dev/" target="_blank">matheussiqueira.dev</a>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="search-bar">
+                    <span class="icon">🔍</span>
+                    <input type="text" placeholder="Search sessions..." disabled>
+                </div>
+                <div class="user-profile">
+                    <div class="avatar">MS</div>
+                </div>
+            </header>
+
+            <section class="viewer-section">
+                <div class="viewer-header">
+                    <h2>Live Analysis Feed</h2>
+                    <div class="viewer-actions">
+                        <button class="btn btn-secondary">Settings</button>
+                        <button class="btn btn-primary" id="toggle-stream">Start Stream</button>
+                    </div>
+                </div>
+                
+                <div class="canvas-container">
+                    <canvas id="video-canvas"></canvas>
+                    <div class="overlay-info" id="no-signal">
+                        <div class="signal-icon">📡</div>
+                        <p>Waiting for Stream...</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="bottom-panel">
+                <div class="panel-header">
+                    <h3>Real-time Analytics Timeline</h3>
+                </div>
+                <div class="timeline-container">
+                    <canvas id="timelineChart"></canvas>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
