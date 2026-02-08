@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EmotionAI | Monitoramento Emocional em Tempo Real</title>
+    <meta name="description" content="Painel profissional para monitoramento emocional com análise facial em tempo real.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="bg-orb orb-a" aria-hidden="true"></div>
+    <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+    <main class="dashboard">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">EmotionAI v2</p>
+                <h1>Centro de Operações Emocionais</h1>
+                <p class="topbar-subtitle">Análise contínua de expressões faciais com telemetria de sessão e ajuste dinâmico.</p>
+            </div>
+            <div class="topbar-actions">
+                <span id="status-badge" class="status-badge status-idle" role="status" aria-live="polite">Offline</span>
+                <button id="toggle-stream" class="btn btn-primary" type="button">Iniciar Transmissão</button>
+            </div>
+        </header>
+
+        <section class="kpi-grid" aria-label="Indicadores principais">
+            <article class="kpi-card">
+                <p class="kpi-label">Pistas ativas</p>
+                <p class="kpi-value" id="track-count">0</p>
+            </article>
+            <article class="kpi-card">
+                <p class="kpi-label">FPS atual</p>
+                <p class="kpi-value" id="fps-value">0.0</p>
+            </article>
+            <article class="kpi-card">
+                <p class="kpi-label">FPS médio</p>
+                <p class="kpi-value" id="avg-fps-value">0.0</p>
+            </article>
+            <article class="kpi-card">
+                <p class="kpi-label">Sentimento médio</p>
+                <p class="kpi-value" id="sentiment-value">0.00</p>
+            </article>
+        </section>
+
+        <section class="workspace">
+            <article class="panel panel-video">
+                <div class="panel-header">
+                    <div>
+                        <h2>Feed ao vivo</h2>
+                        <p>Detecção facial com trilha de emoção dominante.</p>
+                    </div>
+                    <button id="capture-frame" class="btn btn-muted" type="button">Capturar Quadro</button>
+                </div>
+                <div class="video-shell">
+                    <canvas id="video-canvas" aria-label="Vídeo da análise facial"></canvas>
+                    <div class="video-overlay" id="no-signal">
+                        <p>Transmissão indisponível</p>
+                        <small>Inicie o stream para visualizar o processamento em tempo real.</small>
+                    </div>
+                </div>
+            </article>
+
+            <aside class="panel panel-controls">
+                <div class="panel-header">
+                    <div>
+                        <h2>Configuração</h2>
+                        <p>Controles aplicados ao pipeline sem reiniciar o servidor.</p>
+                    </div>
+                </div>
+
+                <label class="field-label" for="api-token">Token API (opcional)</label>
+                <input class="text-input" id="api-token" type="password" placeholder="Bearer token" autocomplete="off">
+
+                <form id="settings-form" class="settings-form">
+                    <label class="field-label" for="emotion-interval">Intervalo de análise (s)</label>
+                    <input class="text-input" id="emotion-interval" type="number" min="0.1" max="5" step="0.1" required>
+
+                    <label class="field-label" for="min-score">Confiança mínima (%)</label>
+                    <input class="text-input" id="min-score" type="number" min="0" max="100" step="1" required>
+
+                    <label class="field-label" for="max-fps">FPS máximo</label>
+                    <input class="text-input" id="max-fps" type="number" min="1" max="60" step="1" required>
+
+                    <label class="field-label" for="jpeg-quality">Qualidade JPEG</label>
+                    <input class="text-input" id="jpeg-quality" type="number" min="30" max="100" step="1" required>
+
+                    <button class="btn btn-secondary" type="submit">Aplicar Configuração</button>
+                </form>
+
+                <div class="control-actions">
+                    <button id="refresh-metrics" class="btn btn-muted" type="button">Atualizar Métricas</button>
+                    <button id="export-metrics" class="btn btn-muted" type="button">Exportar Sessão</button>
+                </div>
+                <p id="config-feedback" class="feedback" aria-live="polite"></p>
+            </aside>
+        </section>
+
+        <section class="analytics-grid">
+            <article class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>Distribuição emocional</h2>
+                        <p>Proporção de emoções dominantes na sessão atual.</p>
+                    </div>
+                </div>
+                <div class="chart-wrap chart-donut">
+                    <canvas id="distributionChart"></canvas>
+                </div>
+            </article>
+
+            <article class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>Linha de sentimento</h2>
+                        <p>Oscilação do sentimento médio por janela temporal.</p>
+                    </div>
+                </div>
+                <div class="chart-wrap chart-line">
+                    <canvas id="timelineChart"></canvas>
+                </div>
+            </article>
+
+            <article class="panel panel-events">
+                <div class="panel-header">
+                    <div>
+                        <h2>Eventos recentes</h2>
+                        <p>Últimas leituras relevantes do stream.</p>
+                    </div>
+                </div>
+                <ul id="event-log" class="event-log" aria-label="Log de eventos"></ul>
+            </article>
+        </section>
+
+        <footer class="footer">
+            <span>Autoria: Matheus Siqueira</span>
+            <a href="https://www.matheussiqueira.dev/" target="_blank" rel="noopener noreferrer">matheussiqueira.dev</a>
+        </footer>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

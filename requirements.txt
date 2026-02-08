@@ -1,0 +1,8 @@
+opencv-python>=4.10.0
+numpy>=1.26.0
+deepface>=0.0.93
+tf-keras>=2.15.0
+fastapi>=0.110.0
+uvicorn[standard]>=0.30.0
+pytest>=8.3.0
+httpx>=0.28.0
