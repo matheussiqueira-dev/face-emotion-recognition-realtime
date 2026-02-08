@@ -1,14 +1,16 @@
 import time
 import logging
+import importlib.util
 import numpy as np
 from typing import Dict, Optional, List
 from dataclasses import dataclass
 
-try:
+_DEEPFACE_SPEC = importlib.util.find_spec("deepface")
+HAS_DEEPFACE = _DEEPFACE_SPEC is not None
+if HAS_DEEPFACE:
     from deepface import DeepFace
-    HAS_DEEPFACE = True
-except ImportError:
-    HAS_DEEPFACE = False
+else:
+    DeepFace = None
 
 LOGGER = logging.getLogger(__name__)
 

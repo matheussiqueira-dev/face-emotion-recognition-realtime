@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
-from pathlib import Optional, Path
-from typing import List, Tuple
+from pathlib import Path
+from typing import List, Tuple, Optional
 from dataclasses import dataclass
 
 @dataclass

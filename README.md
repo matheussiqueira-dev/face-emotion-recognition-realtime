@@ -1,95 +1,113 @@
-# EmotionAI: Real-time Face Emotion Recognition
+# EmotionAI — Real-time Face Emotion Recognition Platform
 
-![Python](https://img.shields.io/badge/Python-3.8+-blue.svg?style=for-the-badge&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?style=for-the-badge&logo=fastapi&logoColor=white)
-![OpenCV](https://img.shields.io/badge/OpenCV-4.0+-green.svg?style=for-the-badge&logo=opencv&logoColor=white)
-![DeepFace](https://img.shields.io/badge/DeepFace-AI%20Analysis-orange.svg?style=for-the-badge)
+EmotionAI is a real-time facial emotion recognition platform that blends a high-performance Python backend with a modern web dashboard for live monitoring. The system targets product teams, researchers, and operators who need fast visual insights from camera feeds while maintaining a clean, scalable architecture.
 
-**EmotionAI** is a high-performance, real-time facial emotion recognition system. It combines a robust Python backend leveraging OpenCV and DeepFace with a state-of-the-art web dashboard for real-time analytics and visualization.
+## 🎯 Purpose & Business Goals
+- **Human insight at scale:** understand mood trends from live or recorded video streams.
+- **Operational clarity:** provide a single dashboard to monitor emotion metrics, tracking performance, and system health.
+- **Extensibility:** allow new detectors, emotion models, and data destinations to be integrated without rewrites.
 
----
-
-## 🌟 Features
-
-- **Real-time Detection & Tracking**: Advanced face detection using Haar Cascades with persistent ID tracking across frames.
-- **Deep Emotion Analysis**: Powered by DeepFace, detecting 7 core emotions: *Happy, Sad, Angry, Surprise, Neutral, Fear, and Disgust*.
-- **Modern Web Dashboard**: A premium, glassmorphism-inspired UI for live monitoring.
-- **Real-time Analytics**: Dynamic charts showing emotion distribution and sentiment timeline.
-- **High Performance**: Asynchronous processing with FastAPI and WebSockets for low-latency streaming.
-- **Session Management**: Automated recording and session analysis (configurable).
-
-## 🛠️ Tech Stack
-
-- **Backend**: Python 3.8+, FastAPI, OpenCV, NumPy, DeepFace, TensorFlow/Keras.
-- **Frontend**: Vanilla HTML5, Modern CSS (Glassmorphism), JavaScript (ES6+), Chart.js.
-- **Communication**: WebSockets (Bi-directional real-time data).
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Python 3.8 or higher.
-- A functional webcam.
-
-### Installation & Run
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/matheussiqueira-dev/face-emotion-recognition.git
-   cd face-emotion-recognition
-   ```
-
-2. **Run the application**:
-   Simply execute the provided batch file (Windows):
-   ```bash
-   run.bat
-   ```
-   Or manually:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Or .venv\Scripts\activate on Windows
-   pip install -r requirements.txt
-   python run_api.py
-   ```
-
-3. **Access the Dashboard**:
-   Open your browser and navigate to: `http://127.0.0.1:8000`
+## ✅ Key Features
+- **Live detection and tracking** with stable IDs across frames.
+- **Deep emotion analysis** using DeepFace (7 core emotions).
+- **Real-time dashboard** with sentiment timeline and emotion distribution.
+- **WebSocket streaming** for low-latency visual output.
+- **Configurable pipeline** for detection scale, tracking TTL, and inference cadence.
+- **API endpoints** for health and configuration telemetry.
 
 ---
 
-## 📂 Project Structure
+## 🧠 Architecture Overview
+EmotionAI follows a modular, clean architecture layout to separate concerns and make future evolution straightforward.
 
-```text
-├── app/
-│   ├── backend/          # FastAPI API and WebSocket logic
-│   ├── core/             # Core processing (detection, tracking, analysis)
-│   └── frontend/         # Web dashboard (HTML, CSS, JS)
-├── run.bat               # One-click startup script
-├── run_api.py            # Entry point for the web server
-└── requirements.txt      # Project dependencies
+```
+app/
+  backend/         # API + WebSocket streaming (FastAPI)
+  core/            # Detection, tracking, emotion analysis, and configuration
+  frontend/        # Dashboard UI (HTML, CSS, JS)
 ```
 
----
+### Core Flow
+1. **Video capture** → OpenCV stream reads frames.
+2. **Face detection** → Haar cascade detection in `FaceDetector`.
+3. **Tracking** → IoU-based tracking assigns stable IDs.
+4. **Emotion inference** → DeepFace analysis on the cropped face.
+5. **Streaming** → Encoded frames + metadata via WebSocket to the frontend.
 
-## 🛠️ Configuration
-
-You can customize the application behavior in `app/core/config.py`:
-- `video_source`: Change between camera index (0, 1...) or a video file path.
-- `emotion_interval`: Frequency of emotion analysis (seconds).
-- `detect_scale`: Resolution scaling for faster detection.
-
-## 📈 Future Improvements
-
-- [ ] Support for multiple detection backends (MediaPipe, MTCNN).
-- [ ] Export session data to PDF/CSV reports.
-- [ ] Multi-camera support.
-- [ ] User authentication and cloud sync.
+### Technical Decisions
+- **FastAPI + WebSockets**: async-friendly and production-ready for real-time streaming.
+- **Modular Core**: decoupled classes so each pipeline component can evolve independently.
+- **Minimal frontend stack**: fast load times and easier deployment with static assets.
 
 ---
 
-## 🤝 Contributing
+## 🛠️ Stack
+- **Backend**: Python 3.8+, FastAPI, OpenCV, NumPy, DeepFace, TensorFlow/Keras
+- **Frontend**: HTML5, Modern CSS, JavaScript (ES6+), Chart.js
+- **Communication**: WebSockets
 
-Contributions are welcome! Feel free to open issues or submit pull requests.
+---
+
+## 📦 Installation & Run
+
+### 1. Clone & install
+```bash
+git clone https://github.com/matheussiqueira-dev/face-emotion-recognition.git
+cd face-emotion-recognition
+python -m venv .venv
+source .venv/bin/activate  # Or .venv\Scripts\activate on Windows
+pip install -r requirements.txt
+```
+
+### 2. Run the server
+```bash
+python run_api.py
+```
+
+### 3. Open dashboard
+Visit: `http://127.0.0.1:8000`
+
+---
+
+## 🔌 API Endpoints
+- `GET /api/health` → health check
+- `GET /api/config` → current runtime config
+- `WS /ws/stream` → video + emotion stream
+
+---
+
+## ⚙️ Configuration
+All main runtime settings are defined in `app/core/config.py`:
+- `video_source`: camera index or video file path
+- `emotion_interval`: time between emotion inferences per track
+- `detect_scale`: detection resolution downscale
+- `track_ttl`: how long a face remains tracked without seeing it
+
+---
+
+## 🔒 Security & Reliability
+- WebSocket transmission is isolated and only enabled on known origins by default.
+- Graceful shutdown ensures video resources are released correctly.
+- Emotion inference is disabled if DeepFace is unavailable to prevent runtime crashes.
+
+---
+
+## 🧪 Testing Strategy (Suggested)
+To evolve into production-grade quality, the following test layers are recommended:
+- **Unit tests** for detector/tracker/analyzer logic
+- **Integration tests** for websocket payload contract
+- **E2E tests** for dashboard rendering and responsiveness
+
+---
+
+## 🚀 Future Improvements
+- MediaPipe and MTCNN detector support
+- Multi-camera fusion dashboard
+- Emotion history export (CSV, PDF)
+- Persistent session storage
+- Auth with role-based access control
+
+---
 
 Autoria: Matheus Siqueira  
-Website: [https://www.matheussiqueira.dev/](https://www.matheussiqueira.dev/)
+Website: https://www.matheussiqueira.dev/
