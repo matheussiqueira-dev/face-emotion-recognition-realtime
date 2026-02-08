@@ -3,6 +3,8 @@ const ctx = canvas.getContext('2d');
 const statusEl = document.getElementById('status');
 const trackCountEl = document.getElementById('track-count');
 const fpsValueEl = document.getElementById('fps-value');
+const sentimentScoreEl = document.getElementById('sentiment-score');
+const lastUpdateEl = document.getElementById('last-update');
 const toggleBtn = document.getElementById('toggle-stream');
 const noSignalEl = document.getElementById('no-signal');
 
@@ -34,14 +36,14 @@ const timelineCtx = document.getElementById('timelineChart').getContext('2d');
 const timelineChart = new Chart(timelineCtx, {
     type: 'line',
     data: {
-        labels: Array(50).fill(''),
+        labels: Array(60).fill(''),
         datasets: [{
             label: 'Average Sentiment',
-            data: Array(50).fill(0),
-            borderColor: '#6366f1',
+            data: Array(60).fill(0),
+            borderColor: '#7c83ff',
             tension: 0.4,
             fill: true,
-            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+            backgroundColor: 'rgba(124, 131, 255, 0.12)',
             pointRadius: 0
         }]
     },
@@ -79,6 +81,7 @@ function connectWebSocket() {
         // Update Stats
         fpsValueEl.textContent = data.fps;
         trackCountEl.textContent = data.tracks.length;
+        lastUpdateEl.textContent = `Last update: ${new Date().toLocaleTimeString()}`;
         
         // Draw Frame
         const image = new Image();
@@ -103,6 +106,7 @@ function connectWebSocket() {
         isStreaming = false;
         toggleBtn.textContent = 'Start Stream';
         toggleBtn.classList.replace('btn-secondary', 'btn-primary');
+        sentimentScoreEl.textContent = '0.00';
     };
 }
 
@@ -150,7 +154,10 @@ const emotionWeights = {
 };
 
 function updateCharts(tracks) {
-    if (tracks.length === 0) return;
+    if (tracks.length === 0) {
+        sentimentScoreEl.textContent = '0.00';
+        return;
+    }
     
     // Distribution Chart
     const counts = { 'happy': 0, 'sad': 0, 'angry': 0, 'surprise': 0, 'neutral': 0, 'fear': 0, 'disgust': 0 };
@@ -168,6 +175,7 @@ function updateCharts(tracks) {
     
     // Timeline Chart
     avgSentiment /= tracks.length;
+    sentimentScoreEl.textContent = avgSentiment.toFixed(2);
     timelineChart.data.datasets[0].data.push(avgSentiment);
     timelineChart.data.datasets[0].data.shift();
     timelineChart.update('none');

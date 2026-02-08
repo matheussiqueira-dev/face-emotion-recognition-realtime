@@ -31,6 +31,12 @@ class AppConfig:
     # Performance
     max_fps: int = 30
     enable_gpu: bool = True
+
+    # API
+    allowed_origins: List[str] = field(default_factory=lambda: [
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ])
     
     # UI/Visuals
     draw_landmarks: bool = True

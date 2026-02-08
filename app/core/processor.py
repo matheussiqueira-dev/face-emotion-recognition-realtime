@@ -1,8 +1,9 @@
 import cv2
 import time
 import logging
+import threading
 import numpy as np
-from typing import Optional, Tuple, Protocol
+from typing import Optional, Tuple, Protocol, List
 from .config import AppConfig
 from .detector import FaceDetector, FaceBox
 from .analyzer import EmotionAnalyzer, EmotionResult
@@ -11,7 +12,7 @@ from .tracker import FaceTracker, Track
 LOGGER = logging.getLogger(__name__)
 
 class FrameCallback(Protocol):
-    def __call__(self, frame: np.ndarray, tracks: list[Track], fps: float) -> None: ...
+    def __call__(self, frame: np.ndarray, tracks: List[Track], fps: float) -> None: ...
 
 class VideoProcessor:
     """Orchestrates the video capture, detection, analysis, and tracking flow."""
@@ -21,10 +22,11 @@ class VideoProcessor:
         self.detector = FaceDetector(config.cascade_path)
         self.analyzer = EmotionAnalyzer(enabled=True)
         self.tracker = FaceTracker(ttl=config.track_ttl, iou_threshold=config.iou_threshold)
-        self._stop_requested = False
+        self._stop_event = threading.Event()
 
     def run(self, callback: Optional[FrameCallback] = None):
         """Starts the video processing loop."""
+        self._stop_event.clear()
         source = self.config.video_source
         if source.isdigit():
             cap = cv2.VideoCapture(int(source))
@@ -42,7 +44,7 @@ class VideoProcessor:
         last_time = time.time()
         
         try:
-            while not self._stop_requested:
+            while not self._stop_event.is_set():
                 success, frame = cap.read()
                 if not success:
                     if not source.isdigit(): # If video file, loop or stop
@@ -89,12 +91,17 @@ class VideoProcessor:
                     if cv2.waitKey(1) & 0xFF == 27:
                         break
 
+                if self.config.max_fps > 0:
+                    target_delay = max(0.0, (1.0 / self.config.max_fps) - (time.time() - now))
+                    if target_delay:
+                        time.sleep(target_delay)
+
         finally:
             cap.release()
             cv2.destroyAllWindows()
 
     def stop(self):
-        self._stop_requested = True
+        self._stop_event.set()
 
     def _crop_face(self, frame: np.ndarray, box: FaceBox) -> np.ndarray:
         h, w = frame.shape[:2]
@@ -102,7 +109,7 @@ class VideoProcessor:
         x2, y2 = min(w, box.x + box.w), min(h, box.y + box.h)
         return frame[y1:y2, x1:x2]
 
-    def _default_draw(self, frame: np.ndarray, tracks: list[Track], fps: float):
+    def _default_draw(self, frame: np.ndarray, tracks: List[Track], fps: float):
         """Default visualization for internal display."""
         for track in tracks:
             b = track.box

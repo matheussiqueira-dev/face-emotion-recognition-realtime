@@ -10,72 +10,95 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- Sidebar -->
         <aside class="sidebar">
             <div class="logo">
                 <div class="logo-icon"></div>
-                <h1>Emotion<span>AI</span></h1>
+                <div>
+                    <p class="logo-eyebrow">Neural Vision Suite</p>
+                    <h1>Emotion<span>AI</span></h1>
+                </div>
             </div>
-            
-            <nav class="stats-panel">
+
+            <nav class="stats-panel" aria-label="System overview">
                 <div class="stat-card">
                     <span class="stat-label">System Status</span>
                     <span class="stat-value pulse" id="status">Connecting...</span>
+                    <span class="stat-meta" id="last-update">Last update: --:--</span>
                 </div>
                 <div class="stat-card">
                     <span class="stat-label">Active Tracks</span>
                     <span class="stat-value" id="track-count">0</span>
+                    <span class="stat-meta">Tracking live faces</span>
                 </div>
                 <div class="stat-card">
                     <span class="stat-label">Inference FPS</span>
                     <span class="stat-value" id="fps-value">0.0</span>
+                    <span class="stat-meta">Streaming performance</span>
+                </div>
+                <div class="stat-card stat-highlight">
+                    <span class="stat-label">Sentiment Index</span>
+                    <span class="stat-value" id="sentiment-score">0.00</span>
+                    <span class="stat-meta">Average session mood</span>
                 </div>
             </nav>
 
             <div class="emotion-distribution">
-                <h3>Emotion Distribution</h3>
-                <canvas id="distributionChart"></canvas>
+                <div class="section-heading">
+                    <h3>Emotion Distribution</h3>
+                    <span class="pill">Live</span>
+                </div>
+                <canvas id="distributionChart" aria-label="Emotion distribution"></canvas>
             </div>
 
             <div class="footer-info">
                 <p>Designed by Matheus Siqueira</p>
-                <a href="https://www.matheussiqueira.dev/" target="_blank">matheussiqueira.dev</a>
+                <a href="https://www.matheussiqueira.dev/" target="_blank" rel="noreferrer">matheussiqueira.dev</a>
             </div>
         </aside>
 
-        <!-- Main Content -->
         <main class="main-content">
             <header class="top-bar">
-                <div class="search-bar">
-                    <span class="icon">🔍</span>
-                    <input type="text" placeholder="Search sessions..." disabled>
+                <div class="page-title">
+                    <p class="eyebrow">Realtime monitoring</p>
+                    <h2>Command Center</h2>
                 </div>
-                <div class="user-profile">
-                    <div class="avatar">MS</div>
+                <div class="top-actions">
+                    <button class="chip" type="button">Lab Mode</button>
+                    <button class="chip" type="button">Auto Insights</button>
+                    <div class="avatar" aria-label="User profile">MS</div>
                 </div>
             </header>
 
-            <section class="viewer-section">
+            <section class="viewer-section" aria-label="Live analysis feed">
                 <div class="viewer-header">
-                    <h2>Live Analysis Feed</h2>
+                    <div>
+                        <h3>Live Analysis Feed</h3>
+                        <p class="subtitle">Real-time overlays with emotion metrics and identification trails.</p>
+                    </div>
                     <div class="viewer-actions">
-                        <button class="btn btn-secondary">Settings</button>
-                        <button class="btn btn-primary" id="toggle-stream">Start Stream</button>
+                        <button class="btn btn-ghost" type="button">Snapshot</button>
+                        <button class="btn btn-secondary" type="button">Settings</button>
+                        <button class="btn btn-primary" id="toggle-stream" type="button">Start Stream</button>
                     </div>
                 </div>
-                
+
                 <div class="canvas-container">
                     <canvas id="video-canvas"></canvas>
-                    <div class="overlay-info" id="no-signal">
+                    <div class="overlay-info" id="no-signal" role="status" aria-live="polite">
                         <div class="signal-icon">📡</div>
                         <p>Waiting for Stream...</p>
+                        <span>Connect to a webcam or video source to begin.</span>
                     </div>
                 </div>
             </section>
 
-            <section class="bottom-panel">
+            <section class="bottom-panel" aria-label="Analytics timeline">
                 <div class="panel-header">
-                    <h3>Real-time Analytics Timeline</h3>
+                    <div>
+                        <h3>Real-time Analytics Timeline</h3>
+                        <p class="subtitle">Sentiment intensity moving average from the last 60 seconds.</p>
+                    </div>
+                    <button class="btn btn-ghost" type="button">Export</button>
                 </div>
                 <div class="timeline-container">
                     <canvas id="timelineChart"></canvas>
