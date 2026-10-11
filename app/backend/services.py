@@ -187,6 +187,7 @@ class StreamService:
                     try:
                         await ws.send_json(payload)
                     except Exception:
+                        LOGGER.warning("Failed to send frame; dropping websocket client.", exc_info=True)
                         disconnected.append(ws)
 
                 if disconnected:

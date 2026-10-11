@@ -51,7 +51,8 @@ class EmotionAnalyzer:
             
             return EmotionResult(
                 dominant=result["dominant_emotion"],
-                scores=result["emotion"],
+                # DeepFace returns numpy.float32 values, which are not JSON serializable.
+                scores={name: float(score) for name, score in result["emotion"].items()},
                 timestamp=time.time()
             )
         except Exception as e:
