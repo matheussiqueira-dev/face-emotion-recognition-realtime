@@ -131,6 +131,19 @@ run.bat
 - Interface: `http://127.0.0.1:8000`
 - Docs API: `http://127.0.0.1:8000/api/v1/docs`
 
+### Alternativa: Docker
+
+Útil quando o TensorFlow não carrega no host (por exemplo, DLLs bloqueadas pelo Controle Inteligente de Aplicativos do Windows). O container processa um arquivo de vídeo; webcam não é repassada por padrão.
+
+```bash
+docker compose up -d --build
+```
+
+- Interface: `http://127.0.0.1:8001` (porta do host configurável com `HOST_PORT`).
+- Vídeo: por padrão `Face-emotions.mp4` da raiz do projeto. Para outro arquivo, defina `VIDEO_DIR` (pasta) e `VIDEO_FILE` (nome).
+- Os pesos do DeepFace são baixados no primeiro stream e ficam no volume `deepface-models`.
+- Testes no container: `docker compose run --rm emotionai python -m pytest -q`.
+
 ## Variáveis de Ambiente
 
 | Variável | Descrição | Padrão |
