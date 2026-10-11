@@ -114,7 +114,9 @@ class VideoProcessor:
 
         finally:
             cap.release()
-            cv2.destroyAllWindows()
+            # Windows only exist in legacy display mode; headless OpenCV builds lack GUI support.
+            if not callback:
+                cv2.destroyAllWindows()
             self._is_running.clear()
 
     def stop(self):

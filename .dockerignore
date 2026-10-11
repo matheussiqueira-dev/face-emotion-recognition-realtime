@@ -1,0 +1,12 @@
+.git/
+.venv/
+.vscode/
+.pytest_cache/
+__pycache__/
+**/__pycache__/
+output/
+*.mp4
+*.avi
+.env
+Dockerfile
+docker-compose.yml
