@@ -1,4 +1,6 @@
-opencv-python>=4.10.0
+# OpenCV 5 wheels no longer ship the Haar cascade XMLs used by app/core/detector.py.
+opencv-python>=4.10.0,<5
+opencv-contrib-python-headless>=4.10.0,<5
 numpy>=1.26.0
 deepface>=0.0.93
 tf-keras>=2.15.0
