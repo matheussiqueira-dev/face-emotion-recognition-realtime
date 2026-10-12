@@ -4,12 +4,13 @@ import numpy as np
 from typing import Dict, Optional, List
 from dataclasses import dataclass
 
-DEEPFACE_IMPORT_ERROR: Optional[ImportError] = None
+DEEPFACE_IMPORT_ERROR: Optional[Exception] = None
 try:
     from deepface import DeepFace
     HAS_DEEPFACE = True
-except ImportError as import_error:
-    # Also raised when DeepFace is installed but a native dependency fails to load (e.g. blocked TensorFlow DLLs).
+except Exception as import_error:
+    # Not only ImportError: when a TensorFlow native library is blocked or missing (e.g. Windows
+    # Application Control), TensorFlow raises its own errors such as NotFoundError during import.
     HAS_DEEPFACE = False
     DEEPFACE_IMPORT_ERROR = import_error
 
