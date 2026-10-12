@@ -48,7 +48,7 @@ class StreamService:
         if self._broadcast_task is None or self._broadcast_task.done():
             self._broadcast_task = asyncio.create_task(self._broadcast_loop())
 
-        self._start_processor()
+        await self._start_processor_async()
 
     async def disconnect(self, websocket: WebSocket) -> None:
         async with self._clients_lock:
@@ -84,7 +84,7 @@ class StreamService:
         await self.stop_processing()
         has_clients = bool(self._clients)
         if has_clients:
-            self._start_processor()
+            await self._start_processor_async()
 
     async def stop_processing(self) -> None:
         await asyncio.to_thread(self._stop_processing_sync)
@@ -96,9 +96,16 @@ class StreamService:
         with self._metrics_lock:
             return self._metrics.snapshot()
 
+    async def _start_processor_async(self) -> None:
+        # Building the processor imports TensorFlow and warms up the model, which takes seconds;
+        # running it in a worker thread keeps the event loop (HTTP, other websockets) responsive.
+        await asyncio.to_thread(self._start_processor)
+
     def _start_processor(self) -> None:
         with self._processor_lock:
-            if self._processor and self._processor.is_running:
+            # Check the thread rather than processor.is_running: the flag is only set once run()
+            # starts, so a concurrent caller could otherwise start a second processor.
+            if self._thread and self._thread.is_alive():
                 return
 
             self._metrics = SessionMetrics()
