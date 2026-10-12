@@ -4,11 +4,14 @@ import numpy as np
 from typing import Dict, Optional, List
 from dataclasses import dataclass
 
+DEEPFACE_IMPORT_ERROR: Optional[ImportError] = None
 try:
     from deepface import DeepFace
     HAS_DEEPFACE = True
-except ImportError:
+except ImportError as import_error:
+    # Also raised when DeepFace is installed but a native dependency fails to load (e.g. blocked TensorFlow DLLs).
     HAS_DEEPFACE = False
+    DEEPFACE_IMPORT_ERROR = import_error
 
 LOGGER = logging.getLogger(__name__)
 
@@ -24,7 +27,7 @@ class EmotionAnalyzer:
     def __init__(self, enabled: bool = True):
         self.enabled = enabled and HAS_DEEPFACE
         if not HAS_DEEPFACE and enabled:
-            LOGGER.error("DeepFace is not installed. Emotion analysis will be disabled.")
+            LOGGER.error("DeepFace could not be imported (%s). Emotion analysis will be disabled.", DEEPFACE_IMPORT_ERROR)
         
         if self.enabled:
             self._warmup()
