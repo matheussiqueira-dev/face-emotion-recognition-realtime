@@ -1,9 +1,27 @@
+import re
 import sys
 import logging
+
+import cv2
+
 from app.core.config import AppConfig
 from app.core.processor import VideoProcessor
 
+
+def has_gui_support() -> bool:
+    """Headless OpenCV builds (the default dependency) cannot open windows."""
+    return not re.search(r"^\s*GUI:\s*NONE\s*$", cv2.getBuildInformation(), re.MULTILINE)
+
+
 def main():
+    if not has_gui_support():
+        print(
+            "This legacy mode needs an OpenCV build with GUI support, but the installed one is headless.\n"
+            "Use the web dashboard instead: python run_api.py\n"
+            "Or swap the OpenCV build: pip uninstall opencv-contrib-python-headless && pip install opencv-contrib-python"
+        )
+        return 1
+
     # Configure logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     
