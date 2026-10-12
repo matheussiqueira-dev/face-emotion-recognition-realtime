@@ -1,5 +1,6 @@
+# Single OpenCV distribution: deepface requires the headless contrib build, and installing a
+# second one (e.g. opencv-python) overwrites the same cv2 package depending on install order.
 # OpenCV 5 wheels no longer ship the Haar cascade XMLs used by app/core/detector.py.
-opencv-python>=4.10.0,<5
 opencv-contrib-python-headless>=4.10.0,<5
 numpy>=1.26.0
 deepface>=0.0.93
