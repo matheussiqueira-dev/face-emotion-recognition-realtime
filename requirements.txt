@@ -7,4 +7,5 @@ tf-keras>=2.15.0
 fastapi>=0.110.0
 uvicorn[standard]>=0.30.0
 pytest>=8.3.0
-httpx>=0.28.0
+# Starlette's TestClient prefers httpx2 and deprecates httpx.
+httpx2>=2.13.0
