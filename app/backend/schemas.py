@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
+
+from app import __version__
 
 
 class FaceBoxSchema(BaseModel):
@@ -37,7 +40,18 @@ class StreamEnvelopeSchema(BaseModel):
 class HealthResponseSchema(BaseModel):
     status: str = "ok"
     timestamp_utc: str
-    version: str = "2.0.0"
+    version: str = __version__
+
+
+class ErrorDetailSchema(BaseModel):
+    code: str = Field(..., examples=["unauthorized"])
+    message: str
+    request_id: str | None = None
+    details: Any | None = None
+
+
+class ErrorResponseSchema(BaseModel):
+    error: ErrorDetailSchema
 
 
 class ConfigResponseSchema(BaseModel):
@@ -45,7 +59,11 @@ class ConfigResponseSchema(BaseModel):
 
 
 class ConfigUpdateRequestSchema(BaseModel):
+    # Reject unknown fields: silently dropping a typo would report success without changing anything.
+    model_config = ConfigDict(extra="forbid")
+
     video_source: str | None = None
+    loop_video: bool | None = None
     width: int | None = None
     height: int | None = None
     fps: float | None = None
@@ -60,8 +78,6 @@ class ConfigUpdateRequestSchema(BaseModel):
     iou_threshold: float | None = None
     max_fps: int | None = None
     jpeg_quality: int | None = None
-    show_fps: bool | None = None
-    theme_color: str | None = None
 
 
 class MetricsResponseSchema(BaseModel):

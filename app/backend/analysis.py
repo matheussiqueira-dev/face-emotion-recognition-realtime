@@ -1,0 +1,76 @@
+"""Browser-camera mode: the client uploads JPEG frames and receives detections back.
+
+Frames never touch disk and are discarded after analysis, which keeps the demo usable with the viewer's own
+webcam (no device passthrough to the server) and limits what the server retains.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from collections.abc import Callable
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator
+
+import numpy as np
+
+from app.backend.serializers import serialize_track
+from app.core.config import AppConfig
+from app.core.pipeline import FramePipeline
+
+
+PipelineFactory = Callable[[], FramePipeline]
+
+
+class SessionLimitReached(Exception):
+    pass
+
+
+class FrameRejected(ValueError):
+    pass
+
+
+def decode_jpeg(data: bytes) -> np.ndarray:
+    import cv2
+
+    frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if frame is None:
+        raise FrameRejected("Frame could not be decoded as an image.")
+    return frame
+
+
+class BrowserAnalysisService:
+    def __init__(self, config: AppConfig, pipeline_factory: PipelineFactory | None = None):
+        self.config = config
+        self._pipeline_factory = pipeline_factory or (lambda: FramePipeline.from_config(config))
+        # Each session runs CPU-heavy inference; cap concurrency instead of degrading every session.
+        self._slots = asyncio.Semaphore(config.max_analyze_sessions)
+
+    @asynccontextmanager
+    async def session(self) -> AsyncIterator["BrowserAnalysisSession"]:
+        if self._slots.locked():
+            raise SessionLimitReached()
+        async with self._slots:
+            # Building a pipeline imports TensorFlow / warms up the model: keep it off the event loop.
+            pipeline = await asyncio.to_thread(self._pipeline_factory)
+            yield BrowserAnalysisSession(pipeline, self.config.max_frame_bytes)
+
+
+class BrowserAnalysisSession:
+    def __init__(self, pipeline: FramePipeline, max_frame_bytes: int):
+        self._pipeline = pipeline
+        self._max_frame_bytes = max_frame_bytes
+
+    async def analyze(self, data: bytes) -> dict[str, Any]:
+        if len(data) > self._max_frame_bytes:
+            raise FrameRejected(f"Frame exceeds {self._max_frame_bytes} bytes.")
+        started = time.perf_counter()
+        tracks = await asyncio.to_thread(self._process, data)
+        return {
+            "type": "analysis",
+            "tracks": [serialize_track(track) for track in tracks],
+            "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+        }
+
+    def _process(self, data: bytes) -> list[Any]:
+        return self._pipeline.process(decode_jpeg(data))

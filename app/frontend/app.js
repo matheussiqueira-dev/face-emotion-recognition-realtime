@@ -38,11 +38,41 @@ const elements = {
     exportMetrics: document.getElementById("export-metrics"),
     captureFrame: document.getElementById("capture-frame"),
     eventLog: document.getElementById("event-log"),
+    cameraVideo: document.getElementById("camera-video"),
+    sourceModeInputs: document.querySelectorAll('input[name="source-mode"]'),
+    noSignalTitle: document.getElementById("no-signal-title"),
+    noSignalHint: document.getElementById("no-signal-hint"),
+    privacyNote: document.getElementById("privacy-note"),
+};
+
+// Frames uploaded in camera mode are downscaled: enough for face detection, far less bandwidth and CPU.
+const CAMERA_MAX_WIDTH = 640;
+const CAMERA_JPEG_QUALITY = 0.7;
+const captureCanvas = document.createElement("canvas");
+const captureCtx = captureCanvas.getContext("2d");
+
+const WS_CLOSE_MESSAGES = {
+    1011: "O servidor falhou ao iniciar a análise.",
+    1013: "Limite de sessões de câmera simultâneas atingido. Tente novamente em instantes.",
+    4401: "Token ausente ou inválido.",
+    4403: "Este token não tem permissão para esta operação.",
+};
+
+const SOURCE_COPY = {
+    server: {
+        title: "Transmissão indisponível",
+        hint: "Inicie o stream para visualizar o processamento em tempo real.",
+    },
+    camera: {
+        title: "Câmera desligada",
+        hint: "Inicie a transmissão e permita o acesso à câmera para analisar seu próprio rosto.",
+    },
 };
 
 const ctx = elements.canvas.getContext("2d");
 const state = {
     ws: null,
+    mode: "server",
     isStreaming: false,
     heartbeat: null,
     metricsTimer: null,
@@ -50,6 +80,14 @@ const state = {
     emotionCounts: Object.fromEntries(emotionLabels.map((item) => [item, 0])),
     sentimentSeries: Array(80).fill(0),
     eventBuffer: [],
+    camera: {
+        stream: null,
+        tracks: [],
+        sendScale: 1,
+        analysisTimes: [],
+        fpsSamples: [],
+        rafId: null,
+    },
 };
 
 const distributionChart = new Chart(document.getElementById("distributionChart"), {
@@ -127,14 +165,24 @@ function buildAuthHeaders() {
     return headers;
 }
 
-function buildWsUrl() {
+// Browsers cannot set headers on websockets, so the token travels as a query parameter.
+function buildWsUrl(path) {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const token = elements.apiToken.value.trim();
-    const baseUrl = `${protocol}//${window.location.host}/api/v1/ws/stream`;
+    const baseUrl = `${protocol}//${window.location.host}${path}`;
     if (!token) {
         return baseUrl;
     }
     return `${baseUrl}?token=${encodeURIComponent(token)}`;
+}
+
+async function readErrorMessage(response, fallback) {
+    try {
+        const body = await response.json();
+        return body?.error?.message || fallback;
+    } catch {
+        return fallback;
+    }
 }
 
 function setStatus(mode, text) {
@@ -220,6 +268,9 @@ function drawDetections(tracks) {
 function renderFrame(frameBase64, tracks) {
     const image = new Image();
     image.onload = () => {
+        if (state.mode !== "server") {
+            return;
+        }
         elements.canvas.width = image.width;
         elements.canvas.height = image.height;
         ctx.drawImage(image, 0, 0, image.width, image.height);
@@ -259,14 +310,18 @@ function updateChartsFromTracks(tracks) {
     timelineChart.data.datasets[0].data = state.sentimentSeries;
     timelineChart.update("none");
 
-    distributionChart.data.datasets[0].data = emotionLabels.map((emotion) => state.emotionCounts[emotion] || 0);
+    const totalCounts = emotionLabels.reduce((sum, emotion) => sum + (state.emotionCounts[emotion] || 0), 0) || 1;
+    distributionChart.data.datasets[0].data = emotionLabels.map(
+        (emotion) => Number((((state.emotionCounts[emotion] || 0) / totalCounts) * 100).toFixed(2)),
+    );
     distributionChart.update("none");
 
     elements.sentimentValue.textContent = sentiment.toFixed(2);
 }
 
 function handleFramePayload(payload) {
-    if (!payload || !payload.frame || !payload.data) {
+    // Frames still in flight after switching to camera mode are dropped.
+    if (state.mode !== "server" || !payload || !payload.frame || !payload.data) {
         return;
     }
     const tracks = payload.data.tracks || [];
@@ -287,12 +342,46 @@ function handleFramePayload(payload) {
     }
 }
 
+function resetSessionCharts() {
+    state.frameCounter = 0;
+    state.emotionCounts = Object.fromEntries(emotionLabels.map((item) => [item, 0]));
+    state.sentimentSeries = Array(80).fill(0);
+    timelineChart.data.datasets[0].data = state.sentimentSeries;
+    timelineChart.update("none");
+    distributionChart.data.datasets[0].data = emotionLabels.map(() => 0);
+    distributionChart.update("none");
+}
+
+function handleStreamClosed(event) {
+    // A late close from a previous connection must not tear down the one that replaced it.
+    if (state.ws && event.target !== state.ws) {
+        return;
+    }
+    state.ws = null;
+    state.isStreaming = false;
+    updateButtons();
+    stopHeartbeat();
+    stopCameraCapture();
+    elements.noSignal.style.display = "flex";
+    setStatus("idle", "Offline");
+
+    const reason = WS_CLOSE_MESSAGES[event.code];
+    if (reason) {
+        setStatus("error", "Conexão recusada");
+        setFeedback(reason, "error");
+        pushEvent(reason);
+    } else {
+        pushEvent("Transmissão encerrada.");
+    }
+}
+
 function connectWebSocket() {
     if (state.ws && state.ws.readyState === WebSocket.OPEN) {
         return;
     }
 
-    const ws = new WebSocket(buildWsUrl());
+    resetSessionCharts();
+    const ws = new WebSocket(buildWsUrl("/api/v1/ws/stream"));
     state.ws = ws;
 
     ws.onopen = () => {
@@ -316,14 +405,189 @@ function connectWebSocket() {
         setFeedback("Falha de comunicação WebSocket. Verifique token e servidor.", "error");
     };
 
-    ws.onclose = () => {
-        state.isStreaming = false;
+    ws.onclose = handleStreamClosed;
+}
+
+async function startCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+        setFeedback("Este navegador não permite acesso à câmera (é preciso HTTPS ou localhost).", "error");
+        return;
+    }
+
+    let stream;
+    // Block a second click while the permission prompt is open (it would start a second capture).
+    elements.toggleStream.disabled = true;
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
+            audio: false,
+        });
+    } catch (error) {
+        const message = error.name === "NotAllowedError"
+            ? "Permissão de câmera negada pelo navegador."
+            : `Câmera indisponível (${error.name}).`;
+        setStatus("error", "Câmera indisponível");
+        setFeedback(message, "error");
+        pushEvent(message);
+        return;
+    } finally {
+        elements.toggleStream.disabled = false;
+    }
+
+    state.camera.stream = stream;
+    elements.cameraVideo.srcObject = stream;
+    await elements.cameraVideo.play();
+    resetSessionCharts();
+    state.camera.analysisTimes = [];
+    state.camera.fpsSamples = [];
+
+    const ws = new WebSocket(buildWsUrl("/api/v1/ws/analyze"));
+    state.ws = ws;
+    setStatus("idle", "Carregando modelo…");
+
+    ws.onopen = () => {
+        state.isStreaming = true;
         updateButtons();
-        stopHeartbeat();
-        elements.noSignal.style.display = "flex";
-        setStatus("idle", "Offline");
-        pushEvent("Transmissão encerrada.");
+        startHeartbeat();
+        pushEvent("Câmera conectada. Preparando o modelo de emoções…");
     };
+
+    ws.onmessage = (event) => {
+        const payload = JSON.parse(event.data);
+        if (payload.type === "ready") {
+            setStatus("live", "Online · câmera");
+            elements.noSignal.style.display = "none";
+            renderCameraLoop();
+            sendCameraFrame();
+        } else if (payload.type === "analysis") {
+            handleCameraAnalysis(payload);
+            sendCameraFrame();
+        } else if (payload.type === "error") {
+            pushEvent(`Quadro rejeitado: ${payload.message}`);
+            sendCameraFrame();
+        }
+    };
+
+    ws.onerror = () => {
+        setStatus("error", "Erro de conexão");
+        setFeedback("Falha de comunicação WebSocket. Verifique token e servidor.", "error");
+    };
+
+    ws.onclose = handleStreamClosed;
+}
+
+// Stop-and-wait: one frame in flight at a time, so a slower server lowers the frame rate instead of queueing.
+function sendCameraFrame() {
+    const ws = state.ws;
+    const video = elements.cameraVideo;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !video.videoWidth) {
+        return;
+    }
+
+    const scale = Math.min(1, CAMERA_MAX_WIDTH / video.videoWidth);
+    captureCanvas.width = Math.round(video.videoWidth * scale);
+    captureCanvas.height = Math.round(video.videoHeight * scale);
+    captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+    state.camera.sendScale = scale;
+
+    captureCanvas.toBlob(async (blob) => {
+        if (!blob || ws.readyState !== WebSocket.OPEN) {
+            return;
+        }
+        ws.send(await blob.arrayBuffer());
+    }, "image/jpeg", CAMERA_JPEG_QUALITY);
+}
+
+function handleCameraAnalysis(payload) {
+    const scale = state.camera.sendScale || 1;
+    const tracks = (payload.tracks || []).map((track) => ({
+        ...track,
+        box: {
+            x: track.box.x / scale,
+            y: track.box.y / scale,
+            w: track.box.w / scale,
+            h: track.box.h / scale,
+        },
+    }));
+    state.camera.tracks = tracks;
+
+    const now = performance.now();
+    const times = state.camera.analysisTimes;
+    times.push(now);
+    while (times.length && times[0] < now - 1000) {
+        times.shift();
+    }
+    const fps = times.length;
+    state.camera.fpsSamples.push(fps);
+    state.camera.fpsSamples = state.camera.fpsSamples.slice(-120);
+    const avgFps = state.camera.fpsSamples.reduce((sum, value) => sum + value, 0) / state.camera.fpsSamples.length;
+
+    state.frameCounter += 1;
+    elements.trackCount.textContent = String(tracks.length);
+    elements.fpsValue.textContent = fps.toFixed(1);
+    elements.avgFpsValue.textContent = avgFps.toFixed(1);
+    updateChartsFromTracks(tracks);
+
+    if (state.frameCounter % 30 === 0) {
+        const withEmotion = tracks.filter((track) => track.emotion);
+        if (withEmotion.length) {
+            const highlights = withEmotion.slice(0, 2).map((track) => `${track.emotion.dominant} (ID ${track.id})`).join(", ");
+            pushEvent(`Emoções detectadas: ${highlights} · latência ${payload.latency_ms} ms`);
+        }
+    }
+}
+
+// Draw the live camera at display rate and overlay the latest detections (which arrive at inference rate).
+function renderCameraLoop() {
+    const video = elements.cameraVideo;
+    if (!state.camera.stream) {
+        return;
+    }
+    if (video.videoWidth) {
+        if (elements.canvas.width !== video.videoWidth || elements.canvas.height !== video.videoHeight) {
+            elements.canvas.width = video.videoWidth;
+            elements.canvas.height = video.videoHeight;
+        }
+        ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+        drawDetections(state.camera.tracks);
+    }
+    state.camera.rafId = requestAnimationFrame(renderCameraLoop);
+}
+
+function stopCameraCapture() {
+    if (state.camera.rafId) {
+        cancelAnimationFrame(state.camera.rafId);
+        state.camera.rafId = null;
+    }
+    if (state.camera.stream) {
+        state.camera.stream.getTracks().forEach((track) => track.stop());
+        state.camera.stream = null;
+    }
+    elements.cameraVideo.srcObject = null;
+    state.camera.tracks = [];
+}
+
+function resetLiveView() {
+    ctx.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
+    elements.trackCount.textContent = "0";
+    elements.fpsValue.textContent = "0.0";
+    elements.avgFpsValue.textContent = "0.0";
+    elements.sentimentValue.textContent = "0.00";
+    resetSessionCharts();
+}
+
+function setSourceMode(mode) {
+    if (state.isStreaming || state.ws) {
+        closeWebSocket();
+    }
+    // Do not leave the previous source's last frame and figures on screen.
+    resetLiveView();
+    state.mode = mode;
+    const copy = SOURCE_COPY[mode];
+    elements.noSignalTitle.textContent = copy.title;
+    elements.noSignalHint.textContent = copy.hint;
+    elements.privacyNote.hidden = mode !== "camera";
+    pushEvent(mode === "camera" ? "Fonte alterada para a câmera do navegador." : "Fonte alterada para o vídeo do servidor.");
 }
 
 function closeWebSocket() {
@@ -336,11 +600,11 @@ async function fetchConfig() {
     try {
         const response = await fetch("/api/v1/config", { headers: buildAuthHeaders() });
         if (!response.ok) {
-            if (response.status === 401) {
+            if (response.status === 401 || response.status === 403) {
                 setFeedback("Configuração protegida: informe token para carregar parâmetros.", "error");
                 return;
             }
-            throw new Error(`Falha ao carregar configuração (${response.status})`);
+            throw new Error(await readErrorMessage(response, `Falha ao carregar configuração (${response.status})`));
         }
         const payload = await response.json();
         const config = payload.config || {};
@@ -370,10 +634,10 @@ async function applyConfig(event) {
             headers: buildAuthHeaders(),
             body: JSON.stringify(payload),
         });
-        const data = await response.json();
         if (!response.ok) {
-            throw new Error(data.detail || `Não foi possível atualizar a configuração (${response.status})`);
+            throw new Error(await readErrorMessage(response, `Não foi possível atualizar a configuração (${response.status})`));
         }
+        const data = await response.json();
 
         const fields = data.updated_fields?.length ? data.updated_fields.join(", ") : "nenhum campo";
         setFeedback(`Configuração aplicada (${fields}).`, "success");
@@ -385,12 +649,16 @@ async function applyConfig(event) {
 
 async function fetchMetrics() {
     try {
+        // Server metrics describe the server-side stream; camera mode computes its own figures client-side.
+        if (state.mode !== "server") {
+            return;
+        }
         const response = await fetch("/api/v1/metrics", { headers: buildAuthHeaders() });
         if (!response.ok) {
-            if (response.status === 401) {
+            if (response.status === 401 || response.status === 403) {
                 return;
             }
-            throw new Error(`Métricas indisponíveis (${response.status})`);
+            throw new Error(await readErrorMessage(response, `Métricas indisponíveis (${response.status})`));
         }
         const metrics = await response.json();
         elements.avgFpsValue.textContent = Number(metrics.average_fps || 0).toFixed(1);
@@ -422,7 +690,7 @@ async function exportMetrics() {
     try {
         const response = await fetch("/api/v1/metrics", { headers: buildAuthHeaders() });
         if (!response.ok) {
-            throw new Error(`Falha ao exportar métricas (${response.status})`);
+            throw new Error(await readErrorMessage(response, `Falha ao exportar métricas (${response.status})`));
         }
         const metrics = await response.json();
         const blob = new Blob([JSON.stringify(metrics, null, 2)], { type: "application/json" });
@@ -464,11 +732,15 @@ function captureCurrentFrame() {
 }
 
 function toggleStream() {
-    if (state.isStreaming) {
+    if (state.isStreaming || state.ws) {
         closeWebSocket();
         return;
     }
-    connectWebSocket();
+    if (state.mode === "camera") {
+        startCamera();
+    } else {
+        connectWebSocket();
+    }
 }
 
 function setupEvents() {
@@ -478,6 +750,9 @@ function setupEvents() {
     elements.exportMetrics.addEventListener("click", exportMetrics);
     elements.captureFrame.addEventListener("click", captureCurrentFrame);
     elements.apiToken.addEventListener("change", fetchConfig);
+    elements.sourceModeInputs.forEach((input) => {
+        input.addEventListener("change", () => setSourceMode(input.value));
+    });
     window.addEventListener("beforeunload", closeWebSocket);
 }
 

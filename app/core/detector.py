@@ -4,24 +4,8 @@ from pathlib import Path
 from typing import Optional
 from typing import List
 from typing import Tuple
-from dataclasses import dataclass
 
-@dataclass
-class FaceBox:
-    x: int
-    y: int
-    w: int
-    h: int
-
-    @property
-    def area(self) -> int:
-        return self.w * self.h
-
-    def as_tuple(self) -> Tuple[int, int, int, int]:
-        return self.x, self.y, self.w, self.h
-
-    def center(self) -> Tuple[float, float]:
-        return self.x + self.w / 2.0, self.y + self.h / 2.0
+from .models import FaceBox
 
 class FaceDetector:
     """Handles face detection using Haar Cascades."""

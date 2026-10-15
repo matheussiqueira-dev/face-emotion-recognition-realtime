@@ -1,8 +1,7 @@
 import time
 from typing import List, Optional, Iterable
 from dataclasses import dataclass, field
-from .detector import FaceBox
-from .analyzer import EmotionResult
+from .models import EmotionResult, FaceBox
 
 @dataclass
 class Track:
