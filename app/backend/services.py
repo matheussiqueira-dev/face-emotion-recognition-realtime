@@ -4,17 +4,28 @@ import asyncio
 import base64
 import logging
 import threading
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Any
 from typing import TYPE_CHECKING
 
 from fastapi import WebSocket
 
+from app.backend.serializers import serialize_track
 from app.core.config import AppConfig
 from app.core.metrics import SessionMetrics
 
 if TYPE_CHECKING:
-    from app.core.processor import Track
+    from app.core.processor import VideoProcessor
+    from app.core.tracker import Track
+
+ProcessorFactory = Callable[[AppConfig], "VideoProcessor"]
+
+
+def _default_processor_factory(config: AppConfig) -> "VideoProcessor":
+    # Imported lazily: the processor pulls in TensorFlow, which the API should not need to start.
+    from app.core.processor import VideoProcessor
+
+    return VideoProcessor(config)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -23,8 +34,9 @@ LOGGER = logging.getLogger(__name__)
 class StreamService:
     """Coordinates video processing lifecycle and websocket broadcasts."""
 
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, processor_factory: ProcessorFactory | None = None):
         self.config = config
+        self._processor_factory = processor_factory or _default_processor_factory
         self._processor_lock = threading.Lock()
         self._processor: Any = None
         self._thread: threading.Thread | None = None
@@ -109,9 +121,7 @@ class StreamService:
                 return
 
             self._metrics = SessionMetrics()
-            from app.core.processor import VideoProcessor
-
-            self._processor = VideoProcessor(self.config)
+            self._processor = self._processor_factory(self.config)
 
             thread = threading.Thread(
                 target=self._run_processor,
@@ -157,7 +167,7 @@ class StreamService:
             "frame": encoded,
             "data": {
                 "fps": round(float(fps), 2),
-                "tracks": [self._serialize_track(track) for track in tracks],
+                "tracks": [serialize_track(track) for track in tracks],
             },
         }
 
@@ -218,22 +228,3 @@ class StreamService:
         if not ok:
             return None
         return base64.b64encode(buffer).decode("utf-8")
-
-    @staticmethod
-    def _serialize_track(track: Any) -> dict[str, Any]:
-        serialized: dict[str, Any] = {
-            "id": track.id,
-            "box": {
-                "x": track.box.x,
-                "y": track.box.y,
-                "w": track.box.w,
-                "h": track.box.h,
-            },
-            "emotion": None,
-        }
-        if track.emotion:
-            serialized["emotion"] = {
-                "dominant": track.emotion.dominant,
-                "scores": track.emotion.scores,
-            }
-        return serialized

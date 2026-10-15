@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -57,8 +57,8 @@ class AppConfig:
     width: int | None = field(default_factory=lambda: _env_int("EMOTION_WIDTH", 1280))
     height: int | None = field(default_factory=lambda: _env_int("EMOTION_HEIGHT", 720))
     fps: float | None = field(default_factory=lambda: _env_float("EMOTION_CAPTURE_FPS", 30.0))
-    output_path: Path = field(default_factory=lambda: Path(os.getenv("EMOTION_OUTPUT_PATH", "output/recordings")))
-    record_session: bool = field(default_factory=lambda: _env_bool("EMOTION_RECORD_SESSION", True))
+    # Restart file sources at EOF so demos keep running instead of freezing on the last frame.
+    loop_video: bool = field(default_factory=lambda: _env_bool("EMOTION_LOOP_VIDEO", True))
 
     # Detection Settings
     detect_scale: float = field(default_factory=lambda: _env_float("EMOTION_DETECT_SCALE", 0.5))
@@ -78,18 +78,16 @@ class AppConfig:
 
     # Performance
     max_fps: int = field(default_factory=lambda: _env_int("EMOTION_MAX_FPS", 30))
-    enable_gpu: bool = field(default_factory=lambda: _env_bool("EMOTION_ENABLE_GPU", True))
     jpeg_quality: int = field(default_factory=lambda: _env_int("EMOTION_JPEG_QUALITY", 80))
+
+    # Browser camera mode (frames uploaded by the client)
+    max_frame_bytes: int = field(default_factory=lambda: _env_int("EMOTION_MAX_FRAME_BYTES", 2_000_000))
+    max_analyze_sessions: int = field(default_factory=lambda: _env_int("EMOTION_MAX_ANALYZE_SESSIONS", 4))
 
     # API & Security
     cors_origins: list[str] = field(default_factory=lambda: _env_csv("EMOTION_CORS_ORIGINS", ["*"]))
     api_read_token: str | None = field(default_factory=lambda: _env_token("EMOTION_API_READ_TOKEN"))
     api_admin_token: str | None = field(default_factory=lambda: _env_token("EMOTION_API_ADMIN_TOKEN"))
-
-    # UI/Visuals
-    draw_landmarks: bool = field(default_factory=lambda: _env_bool("EMOTION_DRAW_LANDMARKS", True))
-    show_fps: bool = field(default_factory=lambda: _env_bool("EMOTION_SHOW_FPS", True))
-    theme_color: str = field(default_factory=lambda: os.getenv("EMOTION_THEME_COLOR", "#0f766e"))
 
     def __post_init__(self) -> None:
         if self.width is not None and self.width <= 0:
@@ -118,35 +116,47 @@ class AppConfig:
             raise ValueError("max_fps must be greater than zero.")
         if not 1 <= self.jpeg_quality <= 100:
             raise ValueError("jpeg_quality must be in range [1, 100].")
+        if self.max_frame_bytes < 10_000:
+            raise ValueError("max_frame_bytes must be >= 10000.")
+        if self.max_analyze_sessions < 1:
+            raise ValueError("max_analyze_sessions must be >= 1.")
         if self.cascade_path is not None and not self.cascade_path.exists():
             raise ValueError(f"cascade_path does not exist: {self.cascade_path}")
 
     def as_dict(self, include_secrets: bool = False) -> dict[str, Any]:
         data = asdict(self)
-        data["output_path"] = str(self.output_path)
         data["cascade_path"] = str(self.cascade_path) if self.cascade_path else None
         if not include_secrets:
             data["api_read_token"] = "***" if self.api_read_token else None
             data["api_admin_token"] = "***" if self.api_admin_token else None
         return data
 
+    @property
+    def auth_enabled(self) -> bool:
+        return bool(self.api_read_token or self.api_admin_token)
+
     def update_from_dict(self, updates: dict[str, Any]) -> list[str]:
+        """Apply updates atomically: validate on a copy so a rejected update leaves this config untouched."""
         valid_fields = {item.name for item in fields(self)}
         unknown_keys = sorted(key for key in updates if key not in valid_fields)
         if unknown_keys:
             keys = ", ".join(unknown_keys)
             raise ValueError(f"Unknown configuration fields: {keys}")
 
-        changed: list[str] = []
+        parsed_updates: dict[str, Any] = {}
         for key, value in updates.items():
             parsed = value
-            if key in {"output_path", "cascade_path"} and value is not None:
+            if key == "cascade_path" and value is not None:
                 parsed = Path(value)
             elif key == "cors_origins" and isinstance(value, str):
                 parsed = [item.strip() for item in value.split(",") if item.strip()]
-            if getattr(self, key) != parsed:
-                setattr(self, key, parsed)
-                changed.append(key)
+            parsed_updates[key] = parsed
 
-        self.__post_init__()
+        candidate = replace(self, **parsed_updates)  # runs __post_init__ validation
+
+        changed: list[str] = []
+        for key, value in parsed_updates.items():
+            if getattr(self, key) != value:
+                setattr(self, key, getattr(candidate, key))
+                changed.append(key)
         return changed

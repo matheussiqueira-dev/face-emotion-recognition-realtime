@@ -1,13 +1,13 @@
+import sys
 import cv2
 import threading
 import time
 import logging
 import numpy as np
-from typing import Optional, Tuple, Protocol
+from typing import Optional, Protocol
 from .config import AppConfig
-from .detector import FaceDetector, FaceBox
-from .analyzer import EmotionAnalyzer, EmotionResult
-from .tracker import FaceTracker, Track
+from .pipeline import FramePipeline
+from .tracker import Track
 
 LOGGER = logging.getLogger(__name__)
 
@@ -17,11 +17,9 @@ class FrameCallback(Protocol):
 class VideoProcessor:
     """Orchestrates the video capture, detection, analysis, and tracking flow."""
     
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, pipeline: Optional[FramePipeline] = None):
         self.config = config
-        self.detector = FaceDetector(config.cascade_path)
-        self.analyzer = EmotionAnalyzer(enabled=config.enable_emotion_analysis)
-        self.tracker = FaceTracker(ttl=config.track_ttl, iou_threshold=config.iou_threshold)
+        self.pipeline = pipeline or FramePipeline.from_config(config)
         self._stop_requested = threading.Event()
         self._is_running = threading.Event()
 
@@ -32,7 +30,9 @@ class VideoProcessor:
 
         source = str(self.config.video_source)
         if source.isdigit():
-            cap = cv2.VideoCapture(int(source), cv2.CAP_DSHOW)
+            # DirectShow only exists on Windows; elsewhere let OpenCV pick the backend (e.g. V4L2).
+            backend = cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY
+            cap = cv2.VideoCapture(int(source), backend)
         else:
             cap = cv2.VideoCapture(source)
 
@@ -56,43 +56,22 @@ class VideoProcessor:
                 frame_loop_start = time.perf_counter()
                 success, frame = cap.read()
                 if not success:
-                    if not source.isdigit():  # End of file/stream for non-camera source.
+                    if source.isdigit():
+                        continue
+                    # End of file/stream: rewind once for looping demos, otherwise stop.
+                    if self.config.loop_video and cap.set(cv2.CAP_PROP_POS_FRAMES, 0):
+                        success, frame = cap.read()
+                    if not success:
                         break
-                    continue
 
                 now = time.time()
                 dt = now - last_time
                 last_time = now
                 fps = 1.0 / dt if dt > 0 else 0
 
-                # 1. Detection
-                detections = self.detector.detect(
-                    frame, 
-                    scale=self.config.detect_scale,
-                    scale_factor=self.config.scale_factor,
-                    min_neighbors=self.config.min_neighbors,
-                    min_size=self.config.min_face_size
-                )
+                tracks = self.pipeline.process(frame, now=now)
 
-                # 2. Tracking
-                tracks = self.tracker.update(detections)
-
-                # 3. Analyze emotions for untracked or interval-reached tracks
-                for track in tracks:
-                    if (now - track.last_analyzed) >= self.config.emotion_interval:
-                        face_img = self._crop_face(frame, track.box)
-                        if face_img.size > 0:
-                            emotion = self.analyzer.analyze(face_img)
-                            if emotion:
-                                max_score = max(emotion.scores.values()) if emotion.scores else 0.0
-                                if max_score >= self.config.min_emotion_score:
-                                    track.emotion = emotion
-                                    track.history.append(emotion.dominant)
-                                    if len(track.history) > 50:
-                                        track.history.pop(0)
-                                track.last_analyzed = now
-
-                # 4. Callback for UI or streaming
+                # Callback for UI or streaming
                 if callback:
                     try:
                         callback(frame, tracks, fps)
@@ -125,12 +104,6 @@ class VideoProcessor:
     @property
     def is_running(self) -> bool:
         return self._is_running.is_set()
-
-    def _crop_face(self, frame: np.ndarray, box: FaceBox) -> np.ndarray:
-        h, w = frame.shape[:2]
-        x1, y1 = max(0, box.x), max(0, box.y)
-        x2, y2 = min(w, box.x + box.w), min(h, box.y + box.h)
-        return frame[y1:y2, x1:x2]
 
     def _default_draw(self, frame: np.ndarray, tracks: list[Track], fps: float):
         """Default visualization for internal display."""

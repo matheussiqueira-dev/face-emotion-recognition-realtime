@@ -2,7 +2,8 @@ import time
 import logging
 import numpy as np
 from typing import Dict, Optional, List
-from dataclasses import dataclass
+
+from .models import EmotionResult
 
 DEEPFACE_IMPORT_ERROR: Optional[Exception] = None
 try:
@@ -15,12 +16,6 @@ except Exception as import_error:
     DEEPFACE_IMPORT_ERROR = import_error
 
 LOGGER = logging.getLogger(__name__)
-
-@dataclass
-class EmotionResult:
-    dominant: str
-    scores: Dict[str, float]
-    timestamp: float
 
 class EmotionAnalyzer:
     """Analyzes facial expressions to detect emotions."""

@@ -9,7 +9,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
+        integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
+        crossorigin="anonymous"
+    ></script>
 </head>
 <body>
     <div class="bg-orb orb-a" aria-hidden="true"></div>
@@ -54,15 +58,32 @@
                         <h2>Feed ao vivo</h2>
                         <p>Detecção facial com trilha de emoção dominante.</p>
                     </div>
-                    <button id="capture-frame" class="btn btn-muted" type="button">Capturar Quadro</button>
+                    <div class="panel-header-actions">
+                        <fieldset class="segmented" id="source-mode">
+                            <legend class="sr-only">Fonte de vídeo</legend>
+                            <label>
+                                <input type="radio" name="source-mode" value="server" checked>
+                                <span>Vídeo do servidor</span>
+                            </label>
+                            <label>
+                                <input type="radio" name="source-mode" value="camera">
+                                <span>Minha câmera</span>
+                            </label>
+                        </fieldset>
+                        <button id="capture-frame" class="btn btn-muted" type="button">Capturar Quadro</button>
+                    </div>
                 </div>
                 <div class="video-shell">
                     <canvas id="video-canvas" aria-label="Vídeo da análise facial"></canvas>
+                    <video id="camera-video" class="camera-video" playsinline muted aria-hidden="true"></video>
                     <div class="video-overlay" id="no-signal">
-                        <p>Transmissão indisponível</p>
-                        <small>Inicie o stream para visualizar o processamento em tempo real.</small>
+                        <p id="no-signal-title">Transmissão indisponível</p>
+                        <small id="no-signal-hint">Inicie o stream para visualizar o processamento em tempo real.</small>
                     </div>
                 </div>
+                <p class="privacy-note" id="privacy-note" hidden>
+                    Modo câmera: os quadros são analisados em memória e descartados. Nenhuma imagem é gravada.
+                </p>
             </article>
 
             <aside class="panel panel-controls">
