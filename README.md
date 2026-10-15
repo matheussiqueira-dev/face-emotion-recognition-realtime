@@ -12,6 +12,17 @@ O sistema foi estruturado para cenários de monitoramento em tempo real (laborat
 - segurança para ambientes de produção;
 - arquitetura evolutiva e testável.
 
+> 📘 Roteiro técnico e de produto completo: [docs/EVOLUTION.md](docs/EVOLUTION.md).
+
+## Modos de demonstração
+
+| Modo | Como funciona | Quando usar |
+|---|---|---|
+| **Vídeo do servidor** | O servidor lê uma câmera local ou um arquivo de vídeo (em loop) e transmite frames anotados | Demos sem câmera, apresentações e telões |
+| **Minha câmera** | O navegador captura a webcam, envia quadros reduzidos ao servidor e recebe as detecções; nada é gravado | Qualquer pessoa testa com o próprio rosto, inclusive com o servidor em Docker |
+
+O modo câmera exige `https://` ou `localhost` (regra dos navegadores para `getUserMedia`).
+
 ## Objetivo de Negócio
 
 - transformar vídeo em dados emocionais acionáveis;
@@ -22,9 +33,11 @@ O sistema foi estruturado para cenários de monitoramento em tempo real (laborat
 
 ### Camadas
 
-- `app/core`: domínio e processamento (configuração, detecção, tracking, análise, métricas de sessão).
-- `app/backend`: interface de entrega (REST + WebSocket), autenticação/autorização e orquestração de stream.
+- `app/core`: domínio e processamento. `FramePipeline` concentra a lógica por quadro (detectar → rastrear → classificar) e recebe detector e analisador por injeção; `models.py` guarda os objetos de valor sem dependências pesadas.
+- `app/backend`: entrega (REST + WebSocket). `create_app()` é a raiz de composição; rotas recebem colaboradores via `Depends`, com erros padronizados, ID de requisição e cabeçalhos de segurança.
 - `app/frontend`: dashboard operacional, visualização ao vivo, analytics e controles de runtime.
+
+A API sobe sem importar TensorFlow, DeepFace ou OpenCV; o modelo só é carregado (numa thread) quando a primeira transmissão começa.
 
 ### Princípios aplicados
 
@@ -60,28 +73,31 @@ O sistema foi estruturado para cenários de monitoramento em tempo real (laborat
 .
 ├── app
 │   ├── backend
-│   │   ├── api.py
+│   │   ├── api.py            # create_app(): composição, middlewares, rotas
+│   │   ├── analysis.py       # modo câmera do navegador (sessões limitadas)
+│   │   ├── dependencies.py   # injeção de dependências (Depends)
+│   │   ├── errors.py         # contrato de erro padronizado
+│   │   ├── middleware.py     # X-Request-ID e cabeçalhos de segurança
+│   │   ├── routes.py         # REST /api/v1
 │   │   ├── schemas.py
-│   │   ├── security.py
-│   │   └── services.py
+│   │   ├── security.py       # tokens, papéis, 401/403
+│   │   ├── serializers.py
+│   │   ├── services.py       # StreamService (vídeo do servidor)
+│   │   └── websockets.py     # /ws/stream e /ws/analyze
 │   ├── core
-│   │   ├── analyzer.py
+│   │   ├── analyzer.py       # DeepFace
 │   │   ├── config.py
-│   │   ├── detector.py
+│   │   ├── detector.py       # Haar Cascade
 │   │   ├── metrics.py
-│   │   ├── processor.py
+│   │   ├── models.py         # FaceBox, EmotionResult
+│   │   ├── pipeline.py       # FramePipeline
+│   │   ├── processor.py      # captura de vídeo do servidor
 │   │   └── tracker.py
 │   └── frontend
-│       ├── app.js
-│       ├── index.html
-│       └── style.css
+├── docs/EVOLUTION.md
 ├── tests
-│   ├── test_api.py
-│   ├── test_config.py
-│   └── test_metrics.py
-├── main.py
-├── run_api.py
-├── run.bat
+├── Dockerfile / docker-compose.yml
+├── main.py / run_api.py / run.bat
 └── requirements.txt
 ```
 
@@ -155,11 +171,16 @@ docker compose up -d --build
 | `EMOTION_INTERVAL` | Intervalo de inferência por face (s) | `0.5` |
 | `EMOTION_MIN_SCORE` | Confiança mínima da emoção (%) | `0` |
 | `EMOTION_JPEG_QUALITY` | Qualidade do frame no WebSocket | `80` |
+| `EMOTION_LOOP_VIDEO` | Reinicia arquivos de vídeo ao chegar no fim (demo contínua) | `true` |
+| `EMOTION_MAX_FRAME_BYTES` | Tamanho máximo de um quadro enviado pelo navegador | `2000000` |
+| `EMOTION_MAX_ANALYZE_SESSIONS` | Sessões simultâneas do modo câmera | `4` |
 | `EMOTION_API_READ_TOKEN` | Token para leitura (config/metrics/ws) | vazio |
 | `EMOTION_API_ADMIN_TOKEN` | Token para operações administrativas | vazio |
 | `EMOTION_CORS_ORIGINS` | Lista de origens CORS (csv) | `*` |
 
 > Compatibilidade: `EMOTION_API_TOKEN` também é aceito como token legado.
+>
+> Sem tokens configurados, a API fica aberta (modo local/demo) e um aviso aparece no log ao iniciar. Nesse modo, trocar `video_source` pela API é recusado (403), porque permitiria apontar o servidor para qualquer arquivo ou URL.
 
 ## API (Resumo)
 
@@ -167,7 +188,17 @@ docker compose up -d --build
 - `GET /api/v1/config` - configuração atual (perm. `read`).
 - `PATCH /api/v1/config` - atualização de configuração (perm. `admin`).
 - `GET /api/v1/metrics` - métricas da sessão ativa (perm. `read`).
-- `WS /api/v1/ws/stream` - stream de frames e detecções (perm. `read`).
+- `GET /api/v1/metrics/prometheus` - as mesmas métricas no formato de texto do Prometheus (perm. `read`).
+- `WS /api/v1/ws/stream` - stream de frames e detecções do vídeo do servidor (perm. `read`).
+- `WS /api/v1/ws/analyze` - modo câmera: recebe quadros JPEG binários e responde `{"type": "analysis", "tracks": [...], "latency_ms": ...}` (perm. `read`).
+
+Token: cabeçalho `Authorization: Bearer <token>` ou `X-API-Key`; nos WebSockets, também `?token=` (navegadores não enviam cabeçalhos em WebSocket). Token inválido ou ausente → `401`; token de leitura em operação de admin → `403`.
+
+Todos os erros seguem o mesmo formato, e toda resposta traz `X-Request-ID` para correlacionar com os logs:
+
+```json
+{"error": {"code": "forbidden", "message": "This operation requires the admin token.", "request_id": "9f1c..."}}
+```
 
 ## Qualidade e Testes
 
@@ -177,11 +208,14 @@ Executar suíte:
 pytest -q
 ```
 
-Cobertura atual:
+Cobertura atual (36 testes, sem TensorFlow: detector e analisador são substituídos por dublês via injeção):
 
-- validação de configuração;
-- regras de métricas de sessão;
-- autorização e comportamento dos endpoints principais.
+- validação e atualização atômica de configuração;
+- pipeline por quadro (intervalo de inferência, confiança mínima);
+- regras de métricas de sessão e exportação Prometheus;
+- autorização (401 vs 403), contrato de erro, ID de requisição e cabeçalhos de segurança;
+- WebSocket do modo câmera (autenticação, quadros inválidos, limite de sessões);
+- detecção de build sem GUI no `main.py`.
 
 ## Deploy (Produção)
 
@@ -212,7 +246,13 @@ uvicorn app.backend.api:app --host 0.0.0.0 --port 8000 --workers 1
 - autenticação OAuth2/JWT com RBAC completo;
 - suporte a múltiplas câmeras e múltiplos workers;
 - relatórios PDF/CSV com insights por janela temporal;
-- monitoramento com Prometheus/Grafana.
+- dashboards Grafana sobre o endpoint Prometheus.
+
+Detalhes, priorização e guias de implementação em [docs/EVOLUTION.md](docs/EVOLUTION.md).
+
+## Uso Responsável
+
+Reconhecimento de emoções a partir da face é uma inferência probabilística, não uma leitura do estado interno de alguém, e é regulado: o AI Act da UE proíbe seu uso em ambiente de trabalho e de ensino, e a LGPD trata dados biométricos como sensíveis. Use apenas com consentimento explícito e em contextos como pesquisa de UX e testes de mídia. Veja a seção de conformidade em [docs/EVOLUTION.md](docs/EVOLUTION.md).
 
 Autoria: Matheus Siqueira  
 Website: https://www.matheussiqueira.dev/
