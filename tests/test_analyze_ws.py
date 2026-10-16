@@ -50,6 +50,29 @@ def test_analyze_rejects_undecodable_and_oversized_frames(client):
         assert ws.receive_json()["type"] == "analysis"
 
 
+def test_analyze_rejects_resolution_above_limit_before_decoding():
+    # 160x120 = 19200 px declared in the header; the limit is checked without decoding pixels.
+    config = make_config(max_frame_pixels=10_000)
+    app = create_app(config, analysis_service=BrowserAnalysisService(config, fake_pipeline_factory(config)))
+    with TestClient(app) as client:
+        with client.websocket_connect("/api/v1/ws/analyze?token=read-token") as ws:
+            ws.receive_json()
+            ws.send_bytes(_jpeg())
+            rejected = ws.receive_json()
+    assert rejected["code"] == "frame_rejected"
+    assert "160x120" in rejected["message"]
+
+
+def test_analyze_accepts_only_jpeg(client):
+    ok, png = cv2.imencode(".png", np.zeros((120, 160, 3), dtype=np.uint8))
+    assert ok
+    with client.websocket_connect("/api/v1/ws/analyze?token=read-token") as ws:
+        ws.receive_json()
+        ws.send_bytes(png.tobytes())
+        rejected = ws.receive_json()
+    assert rejected == {"type": "error", "code": "frame_rejected", "message": "Frame must be a JPEG image."}
+
+
 def test_analyze_answers_ping(client):
     with client.websocket_connect("/api/v1/ws/analyze?token=read-token") as ws:
         ws.receive_json()

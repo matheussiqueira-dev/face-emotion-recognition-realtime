@@ -3,6 +3,8 @@
 # OpenCV 5 wheels no longer ship the Haar cascade XMLs used by app/core/detector.py.
 opencv-contrib-python-headless>=4.10.0,<5
 numpy>=1.26.0
+# Header-only JPEG validation for uploaded camera frames (also a deepface dependency).
+Pillow>=10.0.0
 deepface>=0.0.93
 tf-keras>=2.15.0
 fastapi>=0.110.0
