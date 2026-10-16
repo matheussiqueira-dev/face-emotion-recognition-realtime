@@ -173,6 +173,7 @@ docker compose up -d --build
 | `EMOTION_JPEG_QUALITY` | Qualidade do frame no WebSocket | `80` |
 | `EMOTION_LOOP_VIDEO` | Reinicia arquivos de vídeo ao chegar no fim (demo contínua) | `true` |
 | `EMOTION_MAX_FRAME_BYTES` | Tamanho máximo de um quadro enviado pelo navegador | `2000000` |
+| `EMOTION_MAX_FRAME_PIXELS` | Resolução máxima (largura × altura) de um quadro do navegador, verificada no cabeçalho antes de decodificar | `8294400` (4K) |
 | `EMOTION_MAX_ANALYZE_SESSIONS` | Sessões simultâneas do modo câmera | `4` |
 | `EMOTION_API_READ_TOKEN` | Token para leitura (config/metrics/ws) | vazio |
 | `EMOTION_API_ADMIN_TOKEN` | Token para operações administrativas | vazio |
@@ -208,13 +209,13 @@ Executar suíte:
 pytest -q
 ```
 
-Cobertura atual (36 testes, sem TensorFlow: detector e analisador são substituídos por dublês via injeção):
+Cobertura atual (38 testes, sem TensorFlow: detector e analisador são substituídos por dublês via injeção):
 
 - validação e atualização atômica de configuração;
 - pipeline por quadro (intervalo de inferência, confiança mínima);
 - regras de métricas de sessão e exportação Prometheus;
 - autorização (401 vs 403), contrato de erro, ID de requisição e cabeçalhos de segurança;
-- WebSocket do modo câmera (autenticação, quadros inválidos, limite de sessões);
+- WebSocket do modo câmera (autenticação, formato e resolução dos quadros, limite de sessões);
 - detecção de build sem GUI no `main.py`.
 
 ## Deploy (Produção)

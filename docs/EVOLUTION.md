@@ -14,7 +14,7 @@ A evolução preservou a arquitetura (sem reescrita) e atacou esses pontos com m
 
 | Indicador | Antes | Depois |
 |---|---|---|
-| Testes automatizados | 13 | **36** (sem TensorFlow: dublês via injeção de dependências) |
+| Testes automatizados | 13 | **38** (sem TensorFlow: dublês via injeção de dependências) |
 | Composição da API | Globais criados na importação do módulo | `create_app()` com injeção de dependências |
 | Contrato de erro | Formato variável por rota | `{"error": {code, message, request_id}}` + `X-Request-ID` |
 | Autorização | Comparação `==`, 401 para tudo | Tempo constante, **401 vs 403** corretos |
@@ -88,7 +88,7 @@ A evolução preservou a arquitetura (sem reescrita) e atacou esses pontos com m
 - ✅ CORS sem `allow_credentials` (auth é por cabeçalho; credenciais só ampliariam a exposição) e cabeçalhos permitidos explícitos.
 - ✅ Middleware de cabeçalhos de segurança com CSP restritiva (exceto nas páginas de documentação do FastAPI, que dependem de script inline).
 - ✅ `X-Request-ID` aceito apenas se casar com `^[A-Za-z0-9._-]{1,64}$` (sem injeção de cabeçalho).
-- ✅ Modo câmera: quadros limitados em tamanho, decodificados em memória e descartados; sessões simultâneas limitadas (fecha com 1013).
+- ✅ Modo câmera: só JPEG; tamanho e resolução verificados no cabeçalho antes de decodificar (um JPEG de 1,5 MB podia declarar 10000×10000 px e ocupar ~300 MB); quadros decodificados em memória e descartados; sessões simultâneas limitadas (fecha com 1013).
 - 🧭 **R2** Token de WebSocket fora da URL (hoje vai em `?token=` e pode aparecer em logs de acesso).
 - 🧭 **R9** Chaves por cliente e OAuth2 para B2B.
 
@@ -436,7 +436,7 @@ class YuNetDetector:
 | **B. Fábrica + `app.state` + `Depends`** | Baixa | Alta | Padrão idiomático do FastAPI |
 | C. Contêiner de DI (ex.: `dependency-injector`) | Média | Alta | Dependência nova sem ganho proporcional neste tamanho de projeto |
 
-**Consequências.** Testes criam apps isolados com dublês (36 testes sem TensorFlow). Novos colaboradores (ex.: repositório de sessões do R3) entram pela fábrica. Quem importava `runtime_config`/`stream_service` do módulo precisa usar `app.state`.
+**Consequências.** Testes criam apps isolados com dublês (38 testes sem TensorFlow). Novos colaboradores (ex.: repositório de sessões do R3) entram pela fábrica. Quem importava `runtime_config`/`stream_service` do módulo precisa usar `app.state`.
 
 ### ADR-002: Modo câmera por envio de quadros via WebSocket
 
@@ -463,7 +463,7 @@ class YuNetDetector:
 
 | Verificação | Resultado |
 |---|---|
-| `pytest -q` (Windows e container) | 36 passed |
+| `pytest -q` (Windows e container) | 38 passed |
 | Importar a API não carrega TensorFlow/DeepFace/OpenCV | Confirmado |
 | Modo câmera ponta a ponta (quadros reais via WebSocket) | 120 quadros, p50 29,6 ms, p95 80,5 ms |
 | Vídeo em loop | 1.400 quadros de um vídeo de 1.210 |
