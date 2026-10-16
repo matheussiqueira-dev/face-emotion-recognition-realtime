@@ -686,13 +686,36 @@ async function fetchMetrics() {
     }
 }
 
+// Camera sessions live in the browser (the server keeps no per-session state for them), so export them from here.
+function buildCameraSessionExport() {
+    const totalCounts = emotionLabels.reduce((sum, emotion) => sum + (state.emotionCounts[emotion] || 0), 0) || 1;
+    const fpsSamples = state.camera.fpsSamples;
+    return {
+        mode: "camera",
+        exported_at: new Date().toISOString(),
+        frames_analyzed: state.frameCounter,
+        average_fps: fpsSamples.length
+            ? Number((fpsSamples.reduce((sum, value) => sum + value, 0) / fpsSamples.length).toFixed(2))
+            : 0,
+        dominant_distribution: Object.fromEntries(
+            emotionLabels.map((emotion) => [emotion, Number((((state.emotionCounts[emotion] || 0) / totalCounts) * 100).toFixed(2))]),
+        ),
+        sentiment_history: [...state.sentimentSeries],
+    };
+}
+
 async function exportMetrics() {
     try {
-        const response = await fetch("/api/v1/metrics", { headers: buildAuthHeaders() });
-        if (!response.ok) {
-            throw new Error(await readErrorMessage(response, `Falha ao exportar métricas (${response.status})`));
+        let metrics;
+        if (state.mode === "camera") {
+            metrics = buildCameraSessionExport();
+        } else {
+            const response = await fetch("/api/v1/metrics", { headers: buildAuthHeaders() });
+            if (!response.ok) {
+                throw new Error(await readErrorMessage(response, `Falha ao exportar métricas (${response.status})`));
+            }
+            metrics = { mode: "server", ...(await response.json()) };
         }
-        const metrics = await response.json();
         const blob = new Blob([JSON.stringify(metrics, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
