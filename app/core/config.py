@@ -82,6 +82,8 @@ class AppConfig:
 
     # Browser camera mode (frames uploaded by the client)
     max_frame_bytes: int = field(default_factory=lambda: _env_int("EMOTION_MAX_FRAME_BYTES", 2_000_000))
+    # Checked from the JPEG header before decoding: a small file can declare a huge resolution.
+    max_frame_pixels: int = field(default_factory=lambda: _env_int("EMOTION_MAX_FRAME_PIXELS", 3840 * 2160))
     max_analyze_sessions: int = field(default_factory=lambda: _env_int("EMOTION_MAX_ANALYZE_SESSIONS", 4))
 
     # API & Security
@@ -118,6 +120,8 @@ class AppConfig:
             raise ValueError("jpeg_quality must be in range [1, 100].")
         if self.max_frame_bytes < 10_000:
             raise ValueError("max_frame_bytes must be >= 10000.")
+        if self.max_frame_pixels < 64 * 64:
+            raise ValueError("max_frame_pixels must be >= 4096.")
         if self.max_analyze_sessions < 1:
             raise ValueError("max_analyze_sessions must be >= 1.")
         if self.cascade_path is not None and not self.cascade_path.exists():
