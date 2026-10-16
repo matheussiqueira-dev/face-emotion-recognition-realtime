@@ -11,6 +11,7 @@ import io
 import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from typing import Any, AsyncIterator
 
 import numpy as np
@@ -18,7 +19,6 @@ import numpy as np
 from app.backend.serializers import serialize_track
 from app.core.config import AppConfig
 from app.core.pipeline import FramePipeline
-
 
 PipelineFactory = Callable[[], FramePipeline]
 
@@ -66,7 +66,7 @@ def decode_jpeg(data: bytes) -> np.ndarray:
 class BrowserAnalysisService:
     def __init__(self, config: AppConfig, pipeline_factory: PipelineFactory | None = None):
         self.config = config
-        self._pipeline_factory = pipeline_factory or (lambda: FramePipeline.from_config(config))
+        self._pipeline_factory = pipeline_factory or (lambda: FramePipeline.from_config(replace(config)))
         # Each session runs CPU-heavy inference; cap concurrency instead of degrading every session.
         self._slots = asyncio.Semaphore(config.max_analyze_sessions)
 
@@ -86,6 +86,14 @@ class BrowserAnalysisSession:
         self._max_frame_bytes = max_frame_bytes
         self._max_frame_pixels = max_frame_pixels
 
+    @property
+    def analysis_enabled(self) -> bool:
+        return (
+            self._pipeline.config.enable_emotion_analysis
+            and bool(getattr(self._pipeline.analyzer, "enabled", True))
+            and not getattr(self._pipeline.analyzer, "last_error_code", None)
+        )
+
     async def analyze(self, data: bytes) -> dict[str, Any]:
         if len(data) > self._max_frame_bytes:
             raise FrameRejected(f"Frame exceeds {self._max_frame_bytes} bytes.")
@@ -96,6 +104,7 @@ class BrowserAnalysisSession:
             "type": "analysis",
             "tracks": [serialize_track(track) for track in tracks],
             "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+            "analysis_enabled": self.analysis_enabled,
         }
 
     def _process(self, data: bytes) -> list[Any]:

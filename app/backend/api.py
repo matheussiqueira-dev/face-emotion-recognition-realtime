@@ -10,15 +10,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
-from app.backend import routes
-from app.backend import websockets
+from app.backend import routes, websockets
 from app.backend.analysis import BrowserAnalysisService
 from app.backend.errors import register_error_handlers
-from app.backend.middleware import RequestIdMiddleware
-from app.backend.middleware import SecurityHeadersMiddleware
+from app.backend.middleware import RequestIdMiddleware, SecurityHeadersMiddleware
 from app.backend.services import StreamService
 from app.core.config import AppConfig
-
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)

@@ -20,6 +20,9 @@ const emotionWeights = {
 
 const elements = {
     canvas: document.getElementById("video-canvas"),
+    consent: document.getElementById("session-consent"),
+    latency: document.getElementById("analysis-latency"),
+    summary: document.getElementById("expression-summary"),
     statusBadge: document.getElementById("status-badge"),
     trackCount: document.getElementById("track-count"),
     fpsValue: document.getElementById("fps-value"),
@@ -77,6 +80,8 @@ const state = {
     heartbeat: null,
     metricsTimer: null,
     frameCounter: 0,
+    lastChartUpdate: 0,
+    hasFrame: false,
     emotionCounts: Object.fromEntries(emotionLabels.map((item) => [item, 0])),
     sentimentSeries: Array(80).fill(0),
     eventBuffer: [],
@@ -112,7 +117,7 @@ const distributionChart = new Chart(document.getElementById("distributionChart")
                 labels: {
                     boxWidth: 10,
                     color: "#334155",
-                    font: { family: "IBM Plex Sans", size: 11 },
+                    font: { family: "Segoe UI", size: 11 },
                 },
             },
         },
@@ -125,7 +130,7 @@ const timelineChart = new Chart(document.getElementById("timelineChart"), {
         labels: Array(80).fill(""),
         datasets: [
             {
-                label: "Sentimento",
+                label: "Índice visual heurístico",
                 data: state.sentimentSeries,
                 borderColor: "#0f766e",
                 backgroundColor: "rgba(15, 118, 110, 0.12)",
@@ -165,15 +170,14 @@ function buildAuthHeaders() {
     return headers;
 }
 
-// Browsers cannot set headers on websockets, so the token travels as a query parameter.
+// Credentials are sent in the first message, never in a URL or persistent browser storage.
 function buildWsUrl(path) {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const token = elements.apiToken.value.trim();
-    const baseUrl = `${protocol}//${window.location.host}${path}`;
-    if (!token) {
-        return baseUrl;
-    }
-    return `${baseUrl}?token=${encodeURIComponent(token)}`;
+    return `${protocol}//${window.location.host}${path}`;
+}
+
+function authenticateSocket(ws) {
+    ws.send(JSON.stringify({ type: "auth", token: elements.apiToken.value.trim() }));
 }
 
 async function readErrorMessage(response, fallback) {
@@ -230,6 +234,8 @@ function stopHeartbeat() {
 }
 
 function updateButtons() {
+    elements.toggleStream.disabled = !elements.consent.checked;
+    elements.captureFrame.disabled = !state.hasFrame;
     elements.toggleStream.textContent = state.isStreaming ? "Encerrar Transmissão" : "Iniciar Transmissão";
     elements.toggleStream.classList.toggle("btn-secondary", state.isStreaming);
     elements.toggleStream.classList.toggle("btn-primary", !state.isStreaming);
@@ -252,7 +258,7 @@ function drawDetections(tracks) {
         const confidence = Math.round(Math.max(...Object.values(track.emotion.scores || {}), 0));
         const label = `${track.emotion.dominant.toUpperCase()} ${confidence}%`;
 
-        ctx.font = "600 13px 'IBM Plex Sans'";
+        ctx.font = "600 13px 'Segoe UI'";
         const labelPadding = 12;
         const labelHeight = 26;
         const labelWidth = ctx.measureText(label).width + labelPadding * 2;
@@ -268,7 +274,7 @@ function drawDetections(tracks) {
 function renderFrame(frameBase64, tracks) {
     const image = new Image();
     image.onload = () => {
-        if (state.mode !== "server") {
+        if (state.mode !== "server" || !state.isStreaming) {
             return;
         }
         elements.canvas.width = image.width;
@@ -307,6 +313,10 @@ function updateChartsFromTracks(tracks) {
     const sentiment = sentimentAccumulator / withEmotion;
     state.sentimentSeries.push(sentiment);
     state.sentimentSeries.shift();
+    if (performance.now() - state.lastChartUpdate < 250) {
+        return;
+    }
+    state.lastChartUpdate = performance.now();
     timelineChart.data.datasets[0].data = state.sentimentSeries;
     timelineChart.update("none");
 
@@ -315,6 +325,7 @@ function updateChartsFromTracks(tracks) {
         (emotion) => Number((((state.emotionCounts[emotion] || 0) / totalCounts) * 100).toFixed(2)),
     );
     distributionChart.update("none");
+    elements.summary.textContent = emotionLabels.map((label, index) => `${label}: ${distributionChart.data.datasets[0].data[index]}%`).join(" · ");
 
     elements.sentimentValue.textContent = sentiment.toFixed(2);
 }
@@ -326,6 +337,9 @@ function handleFramePayload(payload) {
     }
     const tracks = payload.data.tracks || [];
 
+    state.hasFrame = true;
+    updateButtons();
+    setStatus(payload.data.analysis_enabled === false ? "error" : "live", payload.data.analysis_enabled === false ? "Análise indisponível" : "Online · vídeo");
     state.frameCounter += 1;
     renderFrame(payload.frame, tracks);
     elements.noSignal.style.display = "none";
@@ -337,7 +351,7 @@ function handleFramePayload(payload) {
         const withEmotion = tracks.filter((track) => track.emotion);
         if (withEmotion.length) {
             const highlights = withEmotion.slice(0, 2).map((track) => `${track.emotion.dominant} (ID ${track.id})`).join(", ");
-            pushEvent(`Emoções detectadas: ${highlights}`);
+            pushEvent(`Expressões estimadas: ${highlights}`);
         }
     }
 }
@@ -359,6 +373,7 @@ function handleStreamClosed(event) {
     }
     state.ws = null;
     state.isStreaming = false;
+    state.hasFrame = false;
     updateButtons();
     stopHeartbeat();
     stopCameraCapture();
@@ -385,9 +400,10 @@ function connectWebSocket() {
     state.ws = ws;
 
     ws.onopen = () => {
+        authenticateSocket(ws);
         state.isStreaming = true;
         updateButtons();
-        setStatus("live", "Online");
+        setStatus("idle", "Carregando modelo…");
         pushEvent("Transmissão iniciada.");
         startHeartbeat();
     };
@@ -434,9 +450,19 @@ async function startCamera() {
         elements.toggleStream.disabled = false;
     }
 
+    if (!elements.consent.checked || state.mode !== "camera") {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+    }
     state.camera.stream = stream;
     elements.cameraVideo.srcObject = stream;
-    await elements.cameraVideo.play();
+    try {
+        await elements.cameraVideo.play();
+    } catch {
+        stopCameraCapture();
+        setFeedback("Não foi possível iniciar o vídeo da câmera. Tente novamente.", "error");
+        return;
+    }
     resetSessionCharts();
     state.camera.analysisTimes = [];
     state.camera.fpsSamples = [];
@@ -446,16 +472,17 @@ async function startCamera() {
     setStatus("idle", "Carregando modelo…");
 
     ws.onopen = () => {
+        authenticateSocket(ws);
         state.isStreaming = true;
         updateButtons();
         startHeartbeat();
-        pushEvent("Câmera conectada. Preparando o modelo de emoções…");
+        pushEvent("Câmera conectada. Preparando o modelo de expressões…");
     };
 
     ws.onmessage = (event) => {
         const payload = JSON.parse(event.data);
         if (payload.type === "ready") {
-            setStatus("live", "Online · câmera");
+            setStatus(payload.analysis_enabled === false ? "error" : "live", payload.analysis_enabled === false ? "Análise indisponível" : "Online · câmera");
             elements.noSignal.style.display = "none";
             renderCameraLoop();
             sendCameraFrame();
@@ -494,11 +521,18 @@ function sendCameraFrame() {
         if (!blob || ws.readyState !== WebSocket.OPEN) {
             return;
         }
-        ws.send(await blob.arrayBuffer());
+        const frame = await blob.arrayBuffer();
+        if (ws === state.ws && state.mode === "camera" && elements.consent.checked && ws.readyState === WebSocket.OPEN) {
+            ws.send(frame);
+        }
     }, "image/jpeg", CAMERA_JPEG_QUALITY);
 }
 
 function handleCameraAnalysis(payload) {
+    state.hasFrame = true;
+    updateButtons();
+    setStatus(payload.analysis_enabled === false ? "error" : "live", payload.analysis_enabled === false ? "Análise indisponível" : "Online · câmera");
+    elements.latency.textContent = `Latência de análise: ${payload.latency_ms} ms`;
     const scale = state.camera.sendScale || 1;
     const tracks = (payload.tracks || []).map((track) => ({
         ...track,
@@ -532,7 +566,7 @@ function handleCameraAnalysis(payload) {
         const withEmotion = tracks.filter((track) => track.emotion);
         if (withEmotion.length) {
             const highlights = withEmotion.slice(0, 2).map((track) => `${track.emotion.dominant} (ID ${track.id})`).join(", ");
-            pushEvent(`Emoções detectadas: ${highlights} · latência ${payload.latency_ms} ms`);
+            pushEvent(`Expressões estimadas: ${highlights} · latência ${payload.latency_ms} ms`);
         }
     }
 }
@@ -568,6 +602,10 @@ function stopCameraCapture() {
 }
 
 function resetLiveView() {
+    state.hasFrame = false;
+    elements.latency.textContent = "Latência: —";
+    elements.summary.textContent = "Aguardando a primeira análise.";
+    updateButtons();
     ctx.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
     elements.trackCount.textContent = "0";
     elements.fpsValue.textContent = "0.0";
@@ -586,7 +624,9 @@ function setSourceMode(mode) {
     const copy = SOURCE_COPY[mode];
     elements.noSignalTitle.textContent = copy.title;
     elements.noSignalHint.textContent = copy.hint;
-    elements.privacyNote.hidden = mode !== "camera";
+    elements.privacyNote.textContent = mode === "camera"
+        ? "Minha câmera: quadros reduzidos são enviados ao servidor desta página, analisados em memória e descartados."
+        : "Vídeo do servidor: usa a fonte configurada no servidor, que pode ser um arquivo de demonstração ou sua câmera local.";
     pushEvent(mode === "camera" ? "Fonte alterada para a câmera do navegador." : "Fonte alterada para o vídeo do servidor.");
 }
 
@@ -649,6 +689,16 @@ async function applyConfig(event) {
 
 async function fetchMetrics() {
     try {
+        if (state.mode === "server" && state.isStreaming) {
+            const statusResponse = await fetch("/api/v1/status", { headers: buildAuthHeaders() });
+            if (statusResponse.ok) {
+                const status = await statusResponse.json();
+                if (status.state === "failed" || (status.state === "idle" && state.frameCounter > 0)) {
+                    closeWebSocket();
+                    setFeedback(status.state === "failed" ? "A fonte de vídeo ou o processador falhou. Verifique a configuração e os logs do servidor." : "A fonte de vídeo foi encerrada.", status.state === "failed" ? "error" : "info");
+                }
+            }
+        }
         // Server metrics describe the server-side stream; camera mode computes its own figures client-side.
         if (state.mode !== "server") {
             return;
@@ -733,7 +783,7 @@ async function exportMetrics() {
 }
 
 function captureCurrentFrame() {
-    if (!elements.canvas.width || !elements.canvas.height) {
+    if (!state.hasFrame) {
         setFeedback("Nenhum frame disponível para captura.", "error");
         return;
     }
@@ -755,6 +805,7 @@ function captureCurrentFrame() {
 }
 
 function toggleStream() {
+    if (!elements.consent.checked) return;
     if (state.isStreaming || state.ws) {
         closeWebSocket();
         return;
@@ -767,6 +818,13 @@ function toggleStream() {
 }
 
 function setupEvents() {
+    elements.consent.addEventListener("change", () => {
+        if (!elements.consent.checked) {
+            closeWebSocket();
+            stopCameraCapture();
+        }
+        updateButtons();
+    });
     elements.toggleStream.addEventListener("click", toggleStream);
     elements.settingsForm.addEventListener("submit", applyConfig);
     elements.refreshMetrics.addEventListener("click", fetchMetrics);
@@ -783,7 +841,7 @@ function startMetricsPolling() {
     clearInterval(state.metricsTimer);
     state.metricsTimer = setInterval(() => {
         fetchMetrics();
-    }, 8000);
+    }, 3000);
 }
 
 function bootstrap() {

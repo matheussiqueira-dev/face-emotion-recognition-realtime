@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
-
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 
@@ -48,6 +48,11 @@ def _env_token(name: str) -> str | None:
     return os.getenv(name) or os.getenv("EMOTION_API_TOKEN") or None
 
 
+def _env_path(name: str) -> Path | None:
+    value = os.getenv(name)
+    return Path(value) if value else None
+
+
 @dataclass(slots=True)
 class AppConfig:
     """Application configuration with runtime validation."""
@@ -65,7 +70,7 @@ class AppConfig:
     scale_factor: float = field(default_factory=lambda: _env_float("EMOTION_SCALE_FACTOR", 1.1))
     min_neighbors: int = field(default_factory=lambda: _env_int("EMOTION_MIN_NEIGHBORS", 5))
     min_face_size: int = field(default_factory=lambda: _env_int("EMOTION_MIN_FACE_SIZE", 30))
-    cascade_path: Path | None = field(default_factory=lambda: Path(os.getenv("EMOTION_CASCADE_PATH")) if os.getenv("EMOTION_CASCADE_PATH") else None)
+    cascade_path: Path | None = field(default_factory=lambda: _env_path("EMOTION_CASCADE_PATH"))
 
     # Analysis Settings
     emotion_interval: float = field(default_factory=lambda: _env_float("EMOTION_INTERVAL", 0.5))
@@ -85,13 +90,26 @@ class AppConfig:
     # Checked from the JPEG header before decoding: a small file can declare a huge resolution.
     max_frame_pixels: int = field(default_factory=lambda: _env_int("EMOTION_MAX_FRAME_PIXELS", 3840 * 2160))
     max_analyze_sessions: int = field(default_factory=lambda: _env_int("EMOTION_MAX_ANALYZE_SESSIONS", 4))
+    max_stream_clients: int = field(default_factory=lambda: _env_int("EMOTION_MAX_STREAM_CLIENTS", 16))
 
     # API & Security
-    cors_origins: list[str] = field(default_factory=lambda: _env_csv("EMOTION_CORS_ORIGINS", ["*"]))
+    cors_origins: list[str] = field(default_factory=lambda: _env_csv("EMOTION_CORS_ORIGINS", []))
     api_read_token: str | None = field(default_factory=lambda: _env_token("EMOTION_API_READ_TOKEN"))
     api_admin_token: str | None = field(default_factory=lambda: _env_token("EMOTION_API_ADMIN_TOKEN"))
 
     def __post_init__(self) -> None:
+        for name in (
+            "fps",
+            "detect_scale",
+            "scale_factor",
+            "emotion_interval",
+            "min_emotion_score",
+            "track_ttl",
+            "iou_threshold",
+        ):
+            value = getattr(self, name)
+            if value is not None and not math.isfinite(value):
+                raise ValueError(f"{name} must be finite.")
         if self.width is not None and self.width <= 0:
             raise ValueError("width must be greater than zero.")
         if self.height is not None and self.height <= 0:
@@ -124,6 +142,8 @@ class AppConfig:
             raise ValueError("max_frame_pixels must be >= 4096.")
         if self.max_analyze_sessions < 1:
             raise ValueError("max_analyze_sessions must be >= 1.")
+        if self.max_stream_clients < 1:
+            raise ValueError("max_stream_clients must be >= 1.")
         if self.cascade_path is not None and not self.cascade_path.exists():
             raise ValueError(f"cascade_path does not exist: {self.cascade_path}")
 

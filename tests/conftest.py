@@ -11,7 +11,6 @@ from app.core.config import AppConfig
 from app.core.models import EmotionResult, FaceBox
 from app.core.pipeline import FramePipeline
 
-
 READ = {"Authorization": "Bearer read-token"}
 ADMIN = {"Authorization": "Bearer admin-token"}
 
@@ -33,7 +32,11 @@ class FakeAnalyzer:
 
     def analyze(self, face_img):
         self.calls += 1
-        return EmotionResult(dominant=self.dominant, scores={self.dominant: self.score, "neutral": 100 - self.score}, timestamp=0.0)
+        return EmotionResult(
+            dominant=self.dominant,
+            scores={self.dominant: self.score, "neutral": 100 - self.score},
+            timestamp=0.0,
+        )
 
 
 def make_config(**overrides) -> AppConfig:

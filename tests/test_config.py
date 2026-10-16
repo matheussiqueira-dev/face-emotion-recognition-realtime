@@ -35,3 +35,9 @@ def test_rejected_update_is_atomic():
 def test_auth_enabled_reflects_tokens():
     assert AppConfig(api_read_token=None, api_admin_token=None).auth_enabled is False
     assert AppConfig(api_read_token=None, api_admin_token="secret").auth_enabled is True
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_config_rejects_non_finite_timing(value):
+    with pytest.raises(ValueError, match="finite"):
+        AppConfig(emotion_interval=value)

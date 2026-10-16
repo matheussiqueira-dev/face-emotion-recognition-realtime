@@ -5,12 +5,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import FastAPI
-from fastapi import Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -68,7 +66,10 @@ async def _handle_http_exception(request: Request, exc: StarletteHTTPException) 
 
 async def _handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     details = [
-        {"field": ".".join(str(part) for part in item.get("loc", ()) if part != "body"), "message": item.get("msg")}
+        {
+            "field": ".".join(str(part) for part in item.get("loc", ()) if part != "body"),
+            "message": item.get("msg"),
+        }
         for item in exc.errors()
     ]
     return JSONResponse(

@@ -1,26 +1,23 @@
 from __future__ import annotations
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from fastapi.responses import PlainTextResponse
 
-from app.backend.dependencies import get_config
-from app.backend.dependencies import get_stream_service
-from app.backend.dependencies import require_admin
-from app.backend.dependencies import require_read
+from app.backend.dependencies import get_config, get_stream_service, require_admin, require_read
 from app.backend.errors import ApiError
-from app.backend.schemas import ConfigResponseSchema
-from app.backend.schemas import ConfigUpdateRequestSchema
-from app.backend.schemas import ErrorResponseSchema
-from app.backend.schemas import HealthResponseSchema
-from app.backend.schemas import MetricsResponseSchema
-from app.backend.schemas import UpdateResultSchema
-from app.backend.services import StreamService
+from app.backend.schemas import (
+    ConfigResponseSchema,
+    ConfigUpdateRequestSchema,
+    ErrorResponseSchema,
+    HealthResponseSchema,
+    MetricsResponseSchema,
+    RuntimeStatusSchema,
+    UpdateResultSchema,
+)
+from app.backend.services import ProcessingBusy, StreamService
 from app.core.config import AppConfig
-
 
 # Fields that make the server open arbitrary files/URLs: only changeable when real auth is configured.
 SOURCE_FIELDS = frozenset({"video_source"})
@@ -50,6 +47,14 @@ async def get_runtime_config(service: StreamService = Depends(get_stream_service
     return ConfigResponseSchema(config=service.get_config_snapshot())
 
 
+@router.get(
+    "/status", response_model=RuntimeStatusSchema, dependencies=[Depends(require_read)], tags=["system"]
+)
+async def get_runtime_status(service: StreamService = Depends(get_stream_service)) -> RuntimeStatusSchema:
+    """Operational status of the shared server-video worker; health is HTTP liveness only."""
+    return RuntimeStatusSchema(**service.get_status_snapshot())
+
+
 @router.patch(
     "/config",
     response_model=UpdateResultSchema,
@@ -71,6 +76,8 @@ async def patch_runtime_config(
         updated = await service.update_config(updates)
     except ValueError as config_error:
         raise ApiError(400, str(config_error)) from config_error
+    except ProcessingBusy as busy:
+        raise ApiError(409, str(busy)) from busy
 
     return UpdateResultSchema(updated_fields=updated, config=service.get_config_snapshot())
 
@@ -108,21 +115,49 @@ def render_prometheus(snapshot: dict) -> str:
         for labels, value in samples:
             lines.append(f"{name}{labels} {value}")
 
-    metric("emotionai_frames_processed_total", "counter", "Frames processed in the current session.",
-           [("", snapshot["frames_processed"])])
-    metric("emotionai_face_detections_total", "counter", "Face detections in the current session.",
-           [("", snapshot["detections_total"])])
-    metric("emotionai_faces_analyzed_total", "counter", "Faces with a classified emotion.",
-           [("", snapshot["analyzed_faces"])])
-    metric("emotionai_active_tracks", "gauge", "Faces tracked in the latest frame.",
-           [("", snapshot["latest_tracks"])])
-    metric("emotionai_fps", "gauge", "Current processing frames per second.",
-           [("", snapshot["current_fps"])])
-    metric("emotionai_session_uptime_seconds", "gauge", "Seconds since the session started.",
-           [("", snapshot["uptime_seconds"])])
+    metric(
+        "emotionai_frames_processed_total",
+        "counter",
+        "Frames processed in the current session.",
+        [("", snapshot["frames_processed"])],
+    )
+    metric(
+        "emotionai_face_detections_total",
+        "counter",
+        "Face detections in the current session.",
+        [("", snapshot["detections_total"])],
+    )
+    metric(
+        "emotionai_faces_analyzed_total",
+        "counter",
+        "Classified frame observations; not unique people or inference calls.",
+        [("", snapshot["analyzed_faces"])],
+    )
+    metric(
+        "emotionai_expression_observations_total",
+        "counter",
+        "Classified frame observations in the current session.",
+        [("", snapshot["expression_observations"])],
+    )
+    metric(
+        "emotionai_active_tracks",
+        "gauge",
+        "Faces tracked in the latest frame.",
+        [("", snapshot["latest_tracks"])],
+    )
+    metric("emotionai_fps", "gauge", "Current processing frames per second.", [("", snapshot["current_fps"])])
+    metric(
+        "emotionai_session_uptime_seconds",
+        "gauge",
+        "Seconds since the session started.",
+        [("", snapshot["uptime_seconds"])],
+    )
     history = snapshot.get("sentiment_history") or [0.0]
-    metric("emotionai_sentiment", "gauge", "Latest average sentiment in [-1, 1].",
-           [("", history[-1])])
-    metric("emotionai_emotion_share_percent", "gauge", "Share of each dominant emotion in the session.",
-           [(f'{{emotion="{label}"}}', share) for label, share in snapshot["dominant_distribution"].items()])
+    metric("emotionai_sentiment", "gauge", "Latest average sentiment in [-1, 1].", [("", history[-1])])
+    metric(
+        "emotionai_emotion_share_percent",
+        "gauge",
+        "Share of each dominant emotion in the session.",
+        [(f'{{emotion="{label}"}}', share) for label, share in snapshot["dominant_distribution"].items()],
+    )
     return "\n".join(lines) + "\n"

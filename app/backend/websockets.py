@@ -1,17 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
-from fastapi import APIRouter
-from fastapi import WebSocket
-from fastapi import WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from app.backend.analysis import FrameRejected
-from app.backend.analysis import SessionLimitReached
-from app.backend.security import Permission
-from app.backend.security import authorize_websocket
-
+from app.backend.analysis import FrameRejected, SessionLimitReached
+from app.backend.security import Permission, authorize_websocket
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,7 +36,8 @@ async def _handle_stream_connection(websocket: WebSocket) -> None:
 
     service = state.stream_service
     try:
-        await service.connect(websocket)
+        if not await service.connect(websocket):
+            return
         while True:
             message = await websocket.receive_text()
             if _is_ping(message):
@@ -65,12 +62,11 @@ async def websocket_analyze(websocket: WebSocket) -> None:
     if not await authorize_websocket(websocket, state.config, Permission.READ):
         return
 
-    await websocket.accept()
     try:
         async with state.analysis_service.session() as session:
-            await websocket.send_json({"type": "ready"})
+            await websocket.send_json({"type": "ready", "analysis_enabled": session.analysis_enabled})
             while True:
-                message = await websocket.receive()
+                message = await asyncio.wait_for(websocket.receive(), timeout=30.0)
                 if message["type"] == "websocket.disconnect":
                     break
                 if message.get("text") is not None:
@@ -80,11 +76,15 @@ async def websocket_analyze(websocket: WebSocket) -> None:
                 try:
                     result = await session.analyze(message.get("bytes") or b"")
                 except FrameRejected as rejected:
-                    await websocket.send_json({"type": "error", "code": "frame_rejected", "message": str(rejected)})
+                    await websocket.send_json(
+                        {"type": "error", "code": "frame_rejected", "message": str(rejected)}
+                    )
                     continue
                 await websocket.send_json(result)
     except SessionLimitReached:
         await _close_quietly(websocket, WS_CLOSE_TRY_AGAIN_LATER, "Too many concurrent camera sessions.")
+    except TimeoutError:
+        await _close_quietly(websocket, 1008, "Camera session was idle for 30 seconds.")
     except WebSocketDisconnect:
         pass
     except Exception:
