@@ -177,7 +177,8 @@ docker compose up -d --build
 | `EMOTION_MAX_ANALYZE_SESSIONS` | Sessões simultâneas do modo câmera | `4` |
 | `EMOTION_API_READ_TOKEN` | Token para leitura (config/metrics/ws) | vazio |
 | `EMOTION_API_ADMIN_TOKEN` | Token para operações administrativas | vazio |
-| `EMOTION_CORS_ORIGINS` | Lista de origens CORS (csv) | `*` |
+| `EMOTION_CORS_ORIGINS` | Origens externas permitidas (csv). Requisições autenticadas de navegador só são aceitas da mesma origem ou desta lista | vazio |
+| `EMOTION_MAX_STREAM_CLIENTS` | Clientes simultâneos no vídeo do servidor | `16` |
 
 > Compatibilidade: `EMOTION_API_TOKEN` também é aceito como token legado.
 >
@@ -187,13 +188,14 @@ docker compose up -d --build
 
 - `GET /api/v1/health` - healthcheck.
 - `GET /api/v1/config` - configuração atual (perm. `read`).
+- `GET /api/v1/status` - estado do processador de vídeo do servidor (`idle`, `starting`, `running`, `stopping`, `degraded`, `failed`) (perm. `read`).
 - `PATCH /api/v1/config` - atualização de configuração (perm. `admin`).
 - `GET /api/v1/metrics` - métricas da sessão ativa (perm. `read`).
 - `GET /api/v1/metrics/prometheus` - as mesmas métricas no formato de texto do Prometheus (perm. `read`).
 - `WS /api/v1/ws/stream` - stream de frames e detecções do vídeo do servidor (perm. `read`).
 - `WS /api/v1/ws/analyze` - modo câmera: recebe quadros JPEG binários e responde `{"type": "analysis", "tracks": [...], "latency_ms": ...}` (perm. `read`).
 
-Token: cabeçalho `Authorization: Bearer <token>` ou `X-API-Key`; nos WebSockets, também `?token=` (navegadores não enviam cabeçalhos em WebSocket). Token inválido ou ausente → `401`; token de leitura em operação de admin → `403`.
+Token: cabeçalho `Authorization: Bearer <token>` ou `X-API-Key`. Nos WebSockets, navegadores não enviam cabeçalhos, então o token vai na **primeira mensagem** (`{"type": "auth", "token": "..."}`), nunca na URL; `?token=` é recusado. Token inválido ou ausente → `401`; token de leitura em operação de admin → `403`; origem de navegador não permitida → `403`.
 
 Todos os erros seguem o mesmo formato, e toda resposta traz `X-Request-ID` para correlacionar com os logs:
 
@@ -209,7 +211,7 @@ Executar suíte:
 pytest -q
 ```
 
-Cobertura atual (38 testes, sem TensorFlow: detector e analisador são substituídos por dublês via injeção):
+Cobertura atual (65 testes, sem carregar TensorFlow; o pipeline usa detector e analisador substituídos por dublês via injeção, e o teste do detector usa o XML real do OpenCV):
 
 - validação e atualização atômica de configuração;
 - pipeline por quadro (intervalo de inferência, confiança mínima);
@@ -217,6 +219,9 @@ Cobertura atual (38 testes, sem TensorFlow: detector e analisador são substitu�
 - autorização (401 vs 403), contrato de erro, ID de requisição e cabeçalhos de segurança;
 - WebSocket do modo câmera (autenticação, formato e resolução dos quadros, limite de sessões);
 - detecção de build sem GUI no `main.py`.
+- carregamento do detector em caminhos com acentos e inicialização com saída CP1252 no Windows.
+
+Diagnóstico verificado do ambiente e correções de restauração: [Fase 1](docs/PHASE1_DIAGNOSTIC.md).
 
 ## Deploy (Produção)
 
