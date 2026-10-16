@@ -1,19 +1,27 @@
+from pathlib import Path
+from typing import List, Optional
+
 import cv2
 import numpy as np
-from pathlib import Path
-from typing import Optional
-from typing import List
-from typing import Tuple
 
 from .models import FaceBox
 
+
 class FaceDetector:
     """Handles face detection using Haar Cascades."""
-    
+
     def __init__(self, cascade_path: Optional[Path] = None):
         self.cascade_path = self._resolve_cascade_path(cascade_path)
-        self.classifier = cv2.CascadeClassifier(str(self.cascade_path))
-        
+        # OpenCV's native file loader can reject Unicode paths on Windows.
+        # Python reads the path correctly; OpenCV parses the same XML from memory.
+        cascade_xml = self.cascade_path.read_text(encoding="utf-8")
+        storage = cv2.FileStorage(cascade_xml, cv2.FILE_STORAGE_READ | cv2.FILE_STORAGE_MEMORY)
+        self.classifier = cv2.CascadeClassifier()
+        try:
+            self.classifier.read(storage.getFirstTopLevelNode())
+        finally:
+            storage.release()
+
         if self.classifier.empty():
             raise RuntimeError(f"Could not load Haar Cascade from {self.cascade_path}")
 
@@ -33,41 +41,37 @@ class FaceDetector:
             small_frame = frame
 
         gray = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.equalizeHist(gray) # Improve detection in different lighting
+        gray = cv2.equalizeHist(gray)  # Improve detection in different lighting
 
         faces = self.classifier.detectMultiScale(
             gray,
             scaleFactor=scale_factor,
             minNeighbors=min_neighbors,
-            minSize=(int(min_size * scale), int(min_size * scale))
+            minSize=(int(min_size * scale), int(min_size * scale)),
         )
 
         inv_scale = 1.0 / scale
         return [
-            FaceBox(
-                int(x * inv_scale),
-                int(y * inv_scale),
-                int(w * inv_scale),
-                int(h * inv_scale)
-            ) for (x, y, w, h) in faces
+            FaceBox(int(x * inv_scale), int(y * inv_scale), int(w * inv_scale), int(h * inv_scale))
+            for (x, y, w, h) in faces
         ]
 
     @staticmethod
     def _resolve_cascade_path(custom_path: Optional[Path]) -> Path:
         if custom_path and custom_path.exists():
             return custom_path
-            
+
         # Default locations
         search_paths = [
             Path.cwd() / "haarcascade_frontalface_default.xml",
             Path(__file__).parent.parent.parent / "haarcascade_frontalface_default.xml",
         ]
-        
+
         if hasattr(cv2, "data"):
             search_paths.append(Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml")
-            
+
         for path in search_paths:
             if path.exists():
                 return path
-                
+
         raise FileNotFoundError("Haar Cascade XML not found. Please provide a valid path.")

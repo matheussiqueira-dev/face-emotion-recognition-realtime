@@ -1,15 +1,10 @@
 from __future__ import annotations
 
 import time
-from collections import Counter
-from collections import deque
-from dataclasses import dataclass
-from dataclasses import field
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import Iterable
-
+from collections import Counter, deque
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Iterable
 
 EMOTION_SENTIMENT_WEIGHTS: dict[str, float] = {
     "happy": 1.0,
@@ -90,6 +85,7 @@ class SessionMetrics:
             "frames_processed": self.frames_processed,
             "detections_total": self.detections_total,
             "analyzed_faces": self.analyzed_faces,
+            "expression_observations": self.analyzed_faces,
             "latest_tracks": self.latest_tracks,
             "peak_tracks": self.peak_tracks,
             "current_fps": self.current_fps,

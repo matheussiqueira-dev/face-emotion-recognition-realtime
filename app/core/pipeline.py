@@ -64,15 +64,21 @@ class FramePipeline:
             min_neighbors=self.config.min_neighbors,
             min_size=self.config.min_face_size,
         )
-        tracks = self.tracker.update(detections)
+        tracks = self.tracker.update(detections, now=now)
 
         for track in tracks:
+            if not self.config.enable_emotion_analysis:
+                track.emotion = None
+                continue
             if (now - track.last_analyzed) < self.config.emotion_interval:
                 continue
             face_img = crop_face(frame, track.box)
             if face_img.size == 0:
                 continue
+            # Rate-limit attempts as well as successes: a failing model must not run every frame.
+            track.last_analyzed = now
             emotion = self.analyzer.analyze(face_img)
+            track.emotion = None
             if emotion:
                 max_score = max(emotion.scores.values()) if emotion.scores else 0.0
                 if max_score >= self.config.min_emotion_score:
@@ -80,12 +86,13 @@ class FramePipeline:
                     track.history.append(emotion.dominant)
                     if len(track.history) > 50:
                         track.history.pop(0)
-                track.last_analyzed = now
         return tracks
 
 
 def crop_face(frame: np.ndarray, box: FaceBox) -> np.ndarray:
     h, w = frame.shape[:2]
     x1, y1 = max(0, box.x), max(0, box.y)
-    x2, y2 = min(w, box.x + box.w), min(h, box.y + box.h)
+    x2, y2 = max(0, min(w, box.x + box.w)), max(0, min(h, box.y + box.h))
+    if x2 <= x1 or y2 <= y1:
+        return frame[0:0, 0:0]
     return frame[y1:y2, x1:x2]

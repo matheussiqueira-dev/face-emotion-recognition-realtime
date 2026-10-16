@@ -34,7 +34,7 @@ body {
         radial-gradient(circle at 88% 80%, #d4f2ea 0%, transparent 42%),
         var(--bg-page);
     color: var(--text-main);
-    font-family: "IBM Plex Sans", sans-serif;
+    font-family: "Segoe UI", system-ui, sans-serif;
     line-height: 1.4;
     padding: 26px;
 }
@@ -84,7 +84,7 @@ body {
 
 .eyebrow {
     color: var(--secondary);
-    font-family: "Sora", sans-serif;
+    font-family: "Segoe UI", system-ui, sans-serif;
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.16em;
@@ -94,7 +94,7 @@ body {
 
 h1,
 h2 {
-    font-family: "Sora", sans-serif;
+    font-family: "Segoe UI", system-ui, sans-serif;
     letter-spacing: -0.02em;
 }
 
@@ -181,7 +181,7 @@ h2 {
 }
 
 .kpi-value {
-    font-family: "Sora", sans-serif;
+    font-family: "Segoe UI", system-ui, sans-serif;
     font-size: clamp(1.38rem, 2vw, 1.85rem);
     font-weight: 700;
 }
@@ -273,7 +273,7 @@ h2 {
     border-radius: 999px;
     color: var(--text-soft);
     display: block;
-    font-family: "Sora", sans-serif;
+    font-family: "Segoe UI", system-ui, sans-serif;
     font-size: 0.8rem;
     font-weight: 600;
     padding: 7px 12px;
@@ -326,7 +326,7 @@ h2 {
 }
 
 .video-overlay p {
-    font-family: "Sora", sans-serif;
+    font-family: "Segoe UI", system-ui, sans-serif;
     font-size: 1.2rem;
     font-weight: 600;
 }
@@ -430,7 +430,7 @@ h2 {
     border: none;
     border-radius: 999px;
     cursor: pointer;
-    font-family: "Sora", sans-serif;
+    font-family: "Segoe UI", system-ui, sans-serif;
     font-size: 0.86rem;
     font-weight: 600;
     padding: 10px 16px;
@@ -543,4 +543,16 @@ h2 {
         align-items: center;
         flex-direction: column;
     }
+}
+
+.session-notice { display: grid; gap: 12px; border-left: 4px solid var(--primary); }
+.consent-label { display: flex; gap: 12px; align-items: center; min-height: 44px; cursor: pointer; }
+.consent-label input { width: 22px; height: 22px; flex-shrink: 0; accent-color: var(--primary); }
+.btn { min-height: 44px; }
+.btn:disabled { cursor: not-allowed; opacity: 0.6; transform: none; }
+.segmented span { min-height: 44px; display: flex; align-items: center; }
+.panel, .kpi-card { min-width: 0; }
+#expression-summary { overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }

@@ -1,22 +1,26 @@
+import logging
 import sys
-import cv2
 import threading
 import time
-import logging
-import numpy as np
 from typing import Optional, Protocol
+
+import cv2
+import numpy as np
+
 from .config import AppConfig
 from .pipeline import FramePipeline
 from .tracker import Track
 
 LOGGER = logging.getLogger(__name__)
 
+
 class FrameCallback(Protocol):
     def __call__(self, frame: np.ndarray, tracks: list[Track], fps: float) -> None: ...
 
+
 class VideoProcessor:
     """Orchestrates the video capture, detection, analysis, and tracking flow."""
-    
+
     def __init__(self, config: AppConfig, pipeline: Optional[FramePipeline] = None):
         self.config = config
         self.pipeline = pipeline or FramePipeline.from_config(config)
@@ -25,7 +29,8 @@ class VideoProcessor:
 
     def run(self, callback: Optional[FrameCallback] = None):
         """Starts the video processing loop."""
-        self._stop_requested.clear()
+        if self._stop_requested.is_set():
+            return
         self._is_running.set()
 
         source = str(self.config.video_source)
@@ -39,7 +44,8 @@ class VideoProcessor:
         if not cap.isOpened():
             LOGGER.error(f"Could not open video source: {source}")
             self._is_running.clear()
-            return
+            cap.release()
+            raise RuntimeError("Video source could not be opened.")
 
         # Configure capture settings
         if self.config.width:
@@ -48,21 +54,28 @@ class VideoProcessor:
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.height)
         if self.config.fps:
             cap.set(cv2.CAP_PROP_FPS, self.config.fps)
-        
+
         last_time = time.time()
-        
+        failed_reads = 0
+
         try:
             while not self._stop_requested.is_set():
                 frame_loop_start = time.perf_counter()
                 success, frame = cap.read()
                 if not success:
                     if source.isdigit():
+                        failed_reads += 1
+                        if failed_reads >= 5:
+                            raise RuntimeError("Camera stopped delivering frames.")
+                        self._stop_requested.wait(0.1)
                         continue
                     # End of file/stream: rewind once for looping demos, otherwise stop.
                     if self.config.loop_video and cap.set(cv2.CAP_PROP_POS_FRAMES, 0):
                         success, frame = cap.read()
                     if not success:
                         break
+
+                failed_reads = 0
 
                 now = time.time()
                 dt = now - last_time
@@ -77,7 +90,7 @@ class VideoProcessor:
                         callback(frame, tracks, fps)
                     except Exception as callback_error:
                         LOGGER.exception("Frame callback failed: %s", callback_error)
-                
+
                 # Internal display if no callback (legacy mode)
                 elif not callback:
                     self._default_draw(frame, tracks, fps)
@@ -109,13 +122,13 @@ class VideoProcessor:
         """Default visualization for internal display."""
         for track in tracks:
             b = track.box
-            color = (99, 102, 241) # Indigo (BGR)
+            color = (99, 102, 241)  # Indigo (BGR)
             cv2.rectangle(frame, (b.x, b.y), (b.x + b.w, b.y + b.h), color, 2)
-            
+
             label = f"ID:{track.id}"
             if track.emotion:
                 label += f" | {track.emotion.dominant} ({max(track.emotion.scores.values()):.0f}%)"
-            
+
             cv2.putText(frame, label, (b.x, b.y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
         cv2.putText(frame, f"FPS: {fps:.1f}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app import __version__
 
@@ -60,7 +58,7 @@ class ConfigResponseSchema(BaseModel):
 
 class ConfigUpdateRequestSchema(BaseModel):
     # Reject unknown fields: silently dropping a typo would report success without changing anything.
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
 
     video_source: str | None = None
     loop_video: bool | None = None
@@ -87,6 +85,9 @@ class MetricsResponseSchema(BaseModel):
     frames_processed: int
     detections_total: int
     analyzed_faces: int
+    expression_observations: int = Field(
+        description="Classified frame observations; not unique people or inference calls."
+    )
     latest_tracks: int
     peak_tracks: int
     current_fps: float
@@ -98,3 +99,9 @@ class MetricsResponseSchema(BaseModel):
 class UpdateResultSchema(BaseModel):
     updated_fields: list[str]
     config: dict[str, Any]
+
+
+class RuntimeStatusSchema(BaseModel):
+    state: Literal["idle", "starting", "running", "stopping", "degraded", "failed"]
+    error_code: str | None
+    clients: int

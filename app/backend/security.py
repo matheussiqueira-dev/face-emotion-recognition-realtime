@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import hmac
+import json
 from enum import Enum
+from urllib.parse import urlsplit
 
 from fastapi import WebSocket
 
@@ -49,8 +52,7 @@ def resolve_role(config: AppConfig, token: str | None) -> Role | None:
     if not token:
         return Role.ANONYMOUS
 
-    admin_token = config.api_admin_token or config.api_read_token
-    if _matches(token, admin_token):
+    if _matches(token, config.api_admin_token):
         return Role.ADMIN
     if _matches(token, config.api_read_token):
         return Role.READER
@@ -68,11 +70,41 @@ def authorize(config: AppConfig, token: str | None, permission: Permission) -> R
 
 
 async def authorize_websocket(websocket: WebSocket, config: AppConfig, permission: Permission) -> bool:
-    """Browsers cannot set headers on websockets, so the token may also come from the ?token= query param."""
+    """Authenticate before allocating a model. Browser credentials travel in the first message."""
+    if not origin_allowed(
+        websocket.headers.get("origin"), websocket.headers.get("host", ""), websocket.url.scheme, config
+    ):
+        await websocket.close(code=WS_CLOSE_FORBIDDEN, reason="Origin is not allowed.")
+        return False
+    if "token" in websocket.query_params:
+        await websocket.close(
+            code=WS_CLOSE_UNAUTHORIZED, reason="Use headers or the first authentication message."
+        )
+        return False
     token = extract_token(
         websocket.headers.get("authorization"),
         websocket.headers.get("x-api-key"),
-    ) or websocket.query_params.get("token")
+    )
+
+    # Accept the transport only; no service/model is created until authorization succeeds.
+    await websocket.accept()
+    if config.auth_enabled and not token:
+        try:
+            message = await asyncio.wait_for(websocket.receive(), timeout=5.0)
+            text = message.get("text", "")
+            if not isinstance(text, str) or len(text) > 4096:
+                raise ValueError("Invalid authentication message")
+            payload = json.loads(text)
+            if not isinstance(payload, dict) or payload.get("type") != "auth":
+                raise ValueError("Invalid authentication message")
+            token = payload.get("token")
+            if not isinstance(token, str):
+                raise ValueError("Invalid token")
+        except (TimeoutError, ValueError):
+            await websocket.close(
+                code=WS_CLOSE_UNAUTHORIZED, reason="Missing or invalid authentication message."
+            )
+            return False
 
     try:
         authorize(config, token, permission)
@@ -81,3 +113,16 @@ async def authorize_websocket(websocket: WebSocket, config: AppConfig, permissio
         await websocket.close(code=code, reason=error.message)
         return False
     return True
+
+
+def origin_allowed(origin: str | None, host: str, scheme: str, config: AppConfig) -> bool:
+    """No Origin is valid for non-browser clients; browsers need same origin or an explicit allowlist."""
+    if origin is None:
+        return True
+    try:
+        parsed = urlsplit(origin)
+    except ValueError:
+        return False
+    expected_scheme = "https" if scheme in {"https", "wss"} else "http"
+    same_origin = parsed.scheme == expected_scheme and parsed.netloc.lower() == host.lower()
+    return same_origin or origin in [item for item in config.cors_origins if item != "*"]
