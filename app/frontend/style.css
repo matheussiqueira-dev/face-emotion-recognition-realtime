@@ -189,7 +189,7 @@ h2 {
 .workspace {
     display: grid;
     gap: 18px;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 }
 
 .panel {
@@ -347,6 +347,13 @@ h2 {
     font-weight: 600;
 }
 
+.field-hint {
+    color: var(--text-soft);
+    font-size: 0.78rem;
+    line-height: 1.4;
+    margin: -4px 0 0;
+}
+
 .text-input {
     background: rgba(255, 255, 255, 0.85);
     border: 1px solid rgba(15, 118, 110, 0.18);
@@ -378,11 +385,19 @@ h2 {
 .analytics-grid {
     display: grid;
     gap: 18px;
-    grid-template-columns: 1fr 1fr 1fr;
+    /* minmax(0, ...) lets tracks shrink below a chart canvas's current width when the viewport narrows
+       (window resize, rotation); plain 1fr keeps the canvas size and forces horizontal scrolling. */
+    grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .chart-wrap {
+    min-width: 0;
     position: relative;
+}
+
+/* Chart.js resizes on the next animation frame; never let a stale canvas width widen the page meanwhile. */
+.chart-wrap canvas {
+    max-width: 100%;
 }
 
 .chart-donut {
@@ -492,11 +507,11 @@ h2 {
     }
 
     .workspace {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .analytics-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 }
 

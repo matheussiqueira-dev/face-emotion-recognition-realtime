@@ -36,6 +36,7 @@ const elements = {
     minScore: document.getElementById("min-score"),
     maxFps: document.getElementById("max-fps"),
     jpegQuality: document.getElementById("jpeg-quality"),
+    emotionSmoothing: document.getElementById("emotion-smoothing"),
     feedback: document.getElementById("config-feedback"),
     refreshMetrics: document.getElementById("refresh-metrics"),
     exportMetrics: document.getElementById("export-metrics"),
@@ -652,6 +653,7 @@ async function fetchConfig() {
         elements.minScore.value = config.min_emotion_score ?? 0;
         elements.maxFps.value = config.max_fps ?? 30;
         elements.jpegQuality.value = config.jpeg_quality ?? 80;
+        elements.emotionSmoothing.value = config.emotion_smoothing ?? 0.5;
         setFeedback("Configuração carregada.", "success");
     } catch (error) {
         setFeedback(error.message, "error");
@@ -666,6 +668,7 @@ async function applyConfig(event) {
         min_emotion_score: Number(elements.minScore.value),
         max_fps: Number(elements.maxFps.value),
         jpeg_quality: Number(elements.jpegQuality.value),
+        emotion_smoothing: Number(elements.emotionSmoothing.value),
     };
 
     try {

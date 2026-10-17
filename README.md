@@ -12,7 +12,16 @@ O sistema foi estruturado para cenários de monitoramento em tempo real (laborat
 - segurança para ambientes de produção;
 - arquitetura evolutiva e testável.
 
-> 📘 Roteiro técnico e de produto completo: [docs/EVOLUTION.md](docs/EVOLUTION.md).
+> 📘 Roteiro técnico e de produto completo: [docs/EVOLUTION.md](docs/EVOLUTION.md). Ciclo de modernização mais recente: [plano mestre](docs/MASTER_EVOLUTION_PLAN.md), [auditoria](docs/REPOSITORY_TECHNICAL_AUDIT.md), [validação](docs/VALIDATION_REPORT.md), [pesquisa](docs/GITHUB_RESEARCH_AND_FEATURES.md), [roadmap](docs/ROADMAP_AND_SKILLS.md) e [CHANGELOG](CHANGELOG.md).
+
+## Destaques técnicos
+
+| Problema | Solução | Evidência |
+|---|---|---|
+| O rótulo de cada rosto oscilava entre quadros (classificação independente a cada inferência) | Suavização exponencial das pontuações **por rosto rastreado** (`EMOTION_SMOOTHING`, padrão 0,5), com o rótulo bruto do modelo exposto em `raw_dominant` | Testes em `tests/test_pipeline.py`; no vídeo de demonstração, 600 quadros com o modelo real: 9 trocas de rótulo brutas → 3 suavizadas (uma execução, um rosto; não é benchmark) |
+| O rastreador casava rostos na ordem de criação, e um rastro antigo podia "roubar" a caixa do vizinho, trocando IDs | Casamento guloso global por IoU decrescente | Teste de regressão `test_tracker_matches_best_overlaps_first_so_neighbours_keep_their_ids` (falhava antes da correção) |
+| Haar Cascade perde rostos inclinados | Detector **YuNet** opcional (`EMOTION_FACE_DETECTOR=yunet`), CNN do OpenCV com modelo MIT de ~230 KB, carregado da memória (caminhos com acentos no Windows) | Nos 1.210 quadros do vídeo, ambos acham o rosto em todos; YuNet leva p50 3,5 ms contra 8,2 ms do Haar. Com os quadros girados (teste sintético), YuNet acha 120/121 a 30° contra 1/121 do Haar, mas **0/121 a 45°** |
+| CI só rodava `pytest`, com faixas de versão | CI com `ruff check`, `ruff format --check`, `mypy` e testes, instalando os pins exatos de `requirements-test.in` | `.github/workflows/tests.yml` |
 
 ## Modos de demonstração
 
@@ -147,6 +156,19 @@ run.bat
 - Interface: `http://127.0.0.1:8000`
 - Docs API: `http://127.0.0.1:8000/api/v1/docs`
 
+### Opcional: detector YuNet
+
+O YuNet ([opencv/opencv_zoo](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet), licença MIT) detecta rostos inclinados e parcialmente virados que o Haar Cascade perde. O modelo não acompanha o repositório. Para OpenCV 4.x, use `face_detection_yunet_2023mar.onnx` (~230 KB):
+
+```bash
+mkdir models
+curl -L -o models/face_detection_yunet_2023mar.onnx https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+```
+
+Depois inicie com `EMOTION_FACE_DETECTOR=yunet` e `EMOTION_YUNET_MODEL=models/face_detection_yunet_2023mar.onnx`. Um caminho relativo é resolvido a partir do diretório em que o servidor é iniciado; se o arquivo não existir, a aplicação recusa iniciar com uma mensagem explícita. Para validar com o vídeo de demonstração: `EMOTION_YUNET_MODEL=models/face_detection_yunet_2023mar.onnx pytest tests/test_yunet_detector.py`.
+
+Comparação no vídeo de demonstração (detalhes em [VALIDATION_REPORT](docs/VALIDATION_REPORT.md)): para rostos frontais, os dois detectores acertam; o YuNet é mais rápido e tolera inclinações de até ~30°, mas não detectou o rosto girado a 45°. O padrão continua `haar`.
+
 ### Alternativa: Docker
 
 Útil quando o TensorFlow não carrega no host (por exemplo, DLLs bloqueadas pelo Controle Inteligente de Aplicativos do Windows). O container processa um arquivo de vídeo; webcam não é repassada por padrão.
@@ -169,7 +191,10 @@ docker compose up -d --build
 | `EMOTION_HEIGHT` | Altura da captura | `720` |
 | `EMOTION_MAX_FPS` | Limite de FPS do pipeline | `30` |
 | `EMOTION_INTERVAL` | Intervalo de inferência por face (s) | `0.5` |
-| `EMOTION_MIN_SCORE` | Confiança mínima da emoção (%) | `0` |
+| `EMOTION_MIN_SCORE` | Confiança mínima da emoção (%), aplicada à saída bruta do modelo | `0` |
+| `EMOTION_SMOOTHING` | Suavização das pontuações por rosto: peso da estimativa anterior, em `[0, 1)`; `0` desliga | `0.5` |
+| `EMOTION_FACE_DETECTOR` | Detector de rostos: `haar` (incluído no OpenCV) ou `yunet` (exige `EMOTION_YUNET_MODEL`) | `haar` |
+| `EMOTION_YUNET_MODEL` | Caminho do arquivo `.onnx` do YuNet. Só por variável de ambiente, não pela API | vazio |
 | `EMOTION_JPEG_QUALITY` | Qualidade do frame no WebSocket | `80` |
 | `EMOTION_LOOP_VIDEO` | Reinicia arquivos de vídeo ao chegar no fim (demo contínua) | `true` |
 | `EMOTION_MAX_FRAME_BYTES` | Tamanho máximo de um quadro enviado pelo navegador | `2000000` |
@@ -195,6 +220,8 @@ docker compose up -d --build
 - `WS /api/v1/ws/stream` - stream de frames e detecções do vídeo do servidor (perm. `read`).
 - `WS /api/v1/ws/analyze` - modo câmera: recebe quadros JPEG binários e responde `{"type": "analysis", "tracks": [...], "latency_ms": ...}` (perm. `read`).
 
+Em cada rastro, `emotion` traz `dominant` e `scores` **suavizados** (conforme `emotion_smoothing`) e `raw_dominant`, o rótulo do modelo na inferência mais recente. Com `emotion_smoothing = 0`, os três refletem a saída bruta.
+
 Token: cabeçalho `Authorization: Bearer <token>` ou `X-API-Key`. Nos WebSockets, navegadores não enviam cabeçalhos, então o token vai na **primeira mensagem** (`{"type": "auth", "token": "..."}`), nunca na URL; `?token=` é recusado. Token inválido ou ausente → `401`; token de leitura em operação de admin → `403`; origem de navegador não permitida → `403`.
 
 Todos os erros seguem o mesmo formato, e toda resposta traz `X-Request-ID` para correlacionar com os logs:
@@ -205,20 +232,30 @@ Todos os erros seguem o mesmo formato, e toda resposta traz `X-Request-ID` para 
 
 ## Qualidade e Testes
 
-Executar suíte:
+Instalar ferramentas de teste (pins exatos usados pelo CI) e executar:
 
 ```bash
-pytest -q
+pip install -r requirements-test.in
+ruff check . && ruff format --check . && mypy && pytest -q
 ```
 
-Cobertura atual (65 testes, sem carregar TensorFlow; o pipeline usa detector e analisador substituídos por dublês via injeção, e o teste do detector usa o XML real do OpenCV):
+Verificações opcionais com o modelo real (baixam pesos do DeepFace se ausentes, sobem um servidor em loopback e nunca abrem câmera física):
+
+```bash
+cd scripts
+python -X utf8 verify_demo.py
+python -X utf8 measure_smoothing.py 600 0.5
+```
+
+Cobertura atual (81 testes + 1 opt-in, sem carregar TensorFlow; o pipeline usa detector e analisador substituídos por dublês via injeção, e o teste do detector usa o XML real do OpenCV):
 
 - validação e atualização atômica de configuração;
 - pipeline por quadro (intervalo de inferência, confiança mínima);
 - regras de métricas de sessão e exportação Prometheus;
 - autorização (401 vs 403), contrato de erro, ID de requisição e cabeçalhos de segurança;
 - WebSocket do modo câmera (autenticação, formato e resolução dos quadros, limite de sessões);
-- detecção de build sem GUI no `main.py`.
+- detecção de build sem GUI no `main.py`;
+- suavização temporal por rosto, casamento global do rastreador e contrato do detector YuNet.
 - carregamento do detector em caminhos com acentos e inicialização com saída CP1252 no Windows.
 
 Diagnóstico verificado do ambiente e correções de restauração: [Fase 1](docs/PHASE1_DIAGNOSTIC.md).

@@ -16,3 +16,6 @@ __pycache__/
 # But generally standard is to ignore. The code redownloads it. Let's ignore it to keep repo clean.
 haarcascade_frontalface_default.xml
 .vscode/
+
+# Optional detector weights (e.g. YuNet .onnx) are downloaded locally, not versioned.
+*.onnx
