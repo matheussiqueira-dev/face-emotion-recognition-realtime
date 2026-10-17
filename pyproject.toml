@@ -1,3 +1,23 @@
+# Vercel's Python builder installs from this table (`uv lock` fails without it). pip, CI and Docker use the
+# requirements files; tests/test_packaging.py keeps `dependencies` equal to requirements.in.
+[project]
+name = "emotionai-realtime"
+version = "2.1.0"
+description = "Real-time facial expression recognition with FastAPI, OpenCV and DeepFace."
+requires-python = ">=3.13"
+license = "MIT"
+dependencies = [
+    "opencv-contrib-python-headless==4.14.0.94",
+    "numpy==2.5.4",
+    "Pillow==12.3.0",
+    "deepface==0.0.102",
+    "tf-keras==2.21.0",
+    "fastapi==0.143.3",
+    "pydantic==2.14.1",
+    "uvicorn==0.54.0",
+    "websockets==17.2",
+]
+
 # Vercel only auto-detects `app` in files such as main.py/app.py; main.py here is the legacy
 # OpenCV window wrapper, so point the FastAPI preset at the real application factory module.
 [tool.vercel]
