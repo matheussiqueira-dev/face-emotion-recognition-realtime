@@ -1,0 +1,8 @@
+-r requirements.in
+pytest==9.1.1
+httpx2==2.13.1
+ruff
+mypy
+pip-audit
+pip-tools
+playwright

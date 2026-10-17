@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EmotionAI | Monitoramento Emocional em Tempo Real</title>
-    <meta name="description" content="Painel profissional para monitoramento emocional com análise facial em tempo real.">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <title>EmotionAI | Laboratório de Expressões Faciais</title>
+    <meta name="description" content="Demonstração de visão computacional para explorar expressões faciais aparentes, com processamento em memória e telemetria de sessão.">
     <link rel="stylesheet" href="/static/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script
+        src="/static/vendor/chart.umd.min.js"
+        integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
+        crossorigin="anonymous"
+    ></script>
 </head>
 <body>
     <div class="bg-orb orb-a" aria-hidden="true"></div>
@@ -18,19 +19,24 @@
     <main class="dashboard">
         <header class="topbar">
             <div>
-                <p class="eyebrow">EmotionAI v2</p>
-                <h1>Centro de Operações Emocionais</h1>
-                <p class="topbar-subtitle">Análise contínua de expressões faciais com telemetria de sessão e ajuste dinâmico.</p>
+                <p class="eyebrow">EmotionAI · Visão computacional</p>
+                <h1>Laboratório de Expressões Faciais</h1>
+                <p class="topbar-subtitle">Explore detecção, rastreamento e classificação em tempo real. Expressão aparente não revela estado emocional nem constitui diagnóstico.</p>
             </div>
             <div class="topbar-actions">
                 <span id="status-badge" class="status-badge status-idle" role="status" aria-live="polite">Offline</span>
-                <button id="toggle-stream" class="btn btn-primary" type="button">Iniciar Transmissão</button>
+                <button id="toggle-stream" class="btn btn-primary" type="button" disabled>Iniciar Transmissão</button>
             </div>
         </header>
 
+        <section class="panel session-notice" aria-label="Antes de iniciar">
+            <p><strong>Uma demonstração transparente.</strong> O modelo estima sete classes de expressão e pode errar. Os quadros são processados em memória; o servidor não grava imagens. “Capturar Quadro” salva uma imagem apenas no seu dispositivo.</p>
+            <label class="consent-label"><input id="session-consent" type="checkbox"> Entendo os limites da análise e, ao usar minha câmera, concordo em enviar quadros ao servidor desta página.</label>
+        </section>
+
         <section class="kpi-grid" aria-label="Indicadores principais">
             <article class="kpi-card">
-                <p class="kpi-label">Pistas ativas</p>
+                <p class="kpi-label">Rostos no quadro</p>
                 <p class="kpi-value" id="track-count">0</p>
             </article>
             <article class="kpi-card">
@@ -42,7 +48,7 @@
                 <p class="kpi-value" id="avg-fps-value">0.0</p>
             </article>
             <article class="kpi-card">
-                <p class="kpi-label">Sentimento médio</p>
+                <p class="kpi-label">Índice visual heurístico</p>
                 <p class="kpi-value" id="sentiment-value">0.00</p>
             </article>
         </section>
@@ -52,24 +58,42 @@
                 <div class="panel-header">
                     <div>
                         <h2>Feed ao vivo</h2>
-                        <p>Detecção facial com trilha de emoção dominante.</p>
+                        <p>Caixas rastreadas e expressão estimada. <span id="analysis-latency">Latência: —</span></p>
                     </div>
-                    <button id="capture-frame" class="btn btn-muted" type="button">Capturar Quadro</button>
+                    <div class="panel-header-actions">
+                        <fieldset class="segmented" id="source-mode">
+                            <legend class="sr-only">Fonte de vídeo</legend>
+                            <label>
+                                <input type="radio" name="source-mode" value="server" checked>
+                                <span>Vídeo do servidor</span>
+                            </label>
+                            <label>
+                                <input type="radio" name="source-mode" value="camera">
+                                <span>Minha câmera</span>
+                            </label>
+                        </fieldset>
+                        <button id="capture-frame" class="btn btn-muted" type="button">Capturar Quadro</button>
+                    </div>
                 </div>
                 <div class="video-shell">
                     <canvas id="video-canvas" aria-label="Vídeo da análise facial"></canvas>
+                    <video id="camera-video" class="camera-video" playsinline muted aria-hidden="true"></video>
                     <div class="video-overlay" id="no-signal">
-                        <p>Transmissão indisponível</p>
-                        <small>Inicie o stream para visualizar o processamento em tempo real.</small>
+                        <p id="no-signal-title">Transmissão indisponível</p>
+                        <small id="no-signal-hint">Inicie o stream para visualizar o processamento em tempo real.</small>
                     </div>
                 </div>
+                <p class="privacy-note" id="privacy-note">
+                    Vídeo do servidor: usa a fonte configurada no servidor, que pode ser um arquivo de demonstração ou sua câmera local.
+                </p>
+                <p class="privacy-note" id="expression-summary" role="status">Aguardando a primeira análise.</p>
             </article>
 
             <aside class="panel panel-controls">
                 <div class="panel-header">
                     <div>
                         <h2>Configuração</h2>
-                        <p>Controles aplicados ao pipeline sem reiniciar o servidor.</p>
+                        <p>O vídeo do servidor reinicia ao aplicar alterações. Reconecte o modo câmera para usar a nova configuração.</p>
                     </div>
                 </div>
 
@@ -104,24 +128,24 @@
             <article class="panel">
                 <div class="panel-header">
                     <div>
-                        <h2>Distribuição emocional</h2>
-                        <p>Proporção de emoções dominantes na sessão atual.</p>
+                        <h2>Expressões observadas</h2>
+                        <p>Proporção por observação de quadro; não representa pessoas únicas.</p>
                     </div>
                 </div>
                 <div class="chart-wrap chart-donut">
-                    <canvas id="distributionChart"></canvas>
+                    <canvas id="distributionChart" role="img" aria-label="Distribuição das expressões; resumo textual abaixo do vídeo"></canvas>
                 </div>
             </article>
 
             <article class="panel">
                 <div class="panel-header">
                     <div>
-                        <h2>Linha de sentimento</h2>
-                        <p>Oscilação do sentimento médio por janela temporal.</p>
+                        <h2>Índice visual ao longo da sessão</h2>
+                        <p>Pesos convencionais entre −1 e 1, sem validação psicológica.</p>
                     </div>
                 </div>
                 <div class="chart-wrap chart-line">
-                    <canvas id="timelineChart"></canvas>
+                    <canvas id="timelineChart" role="img" aria-label="Histórico do índice visual heurístico"></canvas>
                 </div>
             </article>
 
