@@ -4,7 +4,8 @@
 name = "emotionai-realtime"
 version = "2.1.0"
 description = "Real-time facial expression recognition with FastAPI, OpenCV and DeepFace."
-requires-python = ">=3.13"
+# Upper bound is deliberate: Vercel picks the newest allowed Python, and tensorflow 2.21 ships cp313 wheels only.
+requires-python = ">=3.13,<3.14"
 license = "MIT"
 dependencies = [
     "opencv-contrib-python-headless==4.14.0.94",
