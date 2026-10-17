@@ -1,8 +1,9 @@
 import time
-from typing import List, Optional, Iterable
 from dataclasses import dataclass, field
-from .detector import FaceBox
-from .analyzer import EmotionResult
+from typing import Iterable, List, Optional
+
+from .models import EmotionResult, FaceBox
+
 
 @dataclass
 class Track:
@@ -14,52 +15,50 @@ class Track:
     emotion: Optional[EmotionResult] = None
     history: List[str] = field(default_factory=list)
 
+
 class FaceTracker:
     """Tracks faces across frames using Intersection Over Union (IOU)."""
-    
+
     def __init__(self, ttl: float = 1.5, iou_threshold: float = 0.3):
         self.ttl = ttl
         self.iou_threshold = iou_threshold
         self.tracks: List[Track] = []
         self._next_id = 1
 
-    def update(self, detections: Iterable[FaceBox]) -> List[Track]:
-        now = time.time()
+    def update(self, detections: Iterable[FaceBox], now: float | None = None) -> List[Track]:
+        now = time.time() if now is None else now
+        # Expire before matching, otherwise a face can resurrect an already expired track.
+        self.tracks = [track for track in self.tracks if now - track.last_seen <= self.ttl]
         active_tracks = []
         unused_detections = list(detections)
-        
+
         # Match existing tracks to new detections
         for track in self.tracks:
             best_iou = 0.0
             best_det_idx = -1
-            
+
             for i, det in enumerate(unused_detections):
                 score = self._calculate_iou(track.box, det)
                 if score > best_iou:
                     best_iou = score
                     best_det_idx = i
-            
+
             if best_det_idx != -1 and best_iou >= self.iou_threshold:
                 det = unused_detections.pop(best_det_idx)
                 track.box = det
                 track.last_seen = now
                 active_tracks.append(track)
-        
+
         # Create new tracks for unmatched detections
         for det in unused_detections:
-            new_track = Track(
-                id=self._next_id,
-                box=det,
-                start_time=now,
-                last_seen=now
-            )
+            new_track = Track(id=self._next_id, box=det, start_time=now, last_seen=now)
             self._next_id += 1
             active_tracks.append(new_track)
             self.tracks.append(new_track)
 
         # Cleanup expired tracks
         self.tracks = [t for t in self.tracks if (now - t.last_seen) <= self.ttl]
-        
+
         return active_tracks
 
     @staticmethod
