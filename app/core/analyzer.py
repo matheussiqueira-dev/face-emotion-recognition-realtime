@@ -1,10 +1,16 @@
 import logging
+import os
 import time
 from typing import Optional
 
 import numpy as np
 
 from .models import EmotionResult
+
+# Serverless platforms (Vercel sets VERCEL=1) only allow writes under /tmp; DeepFace downloads its
+# weights to $DEEPFACE_HOME/.deepface, which defaults to the read-only home directory.
+if os.getenv("VERCEL") and not os.getenv("DEEPFACE_HOME"):
+    os.environ["DEEPFACE_HOME"] = "/tmp"
 
 DEEPFACE_IMPORT_ERROR: Optional[Exception] = None
 try:
