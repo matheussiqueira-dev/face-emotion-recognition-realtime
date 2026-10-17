@@ -1,3 +1,8 @@
+# Vercel only auto-detects `app` in files such as main.py/app.py; main.py here is the legacy
+# OpenCV window wrapper, so point the FastAPI preset at the real application factory module.
+[tool.vercel]
+entrypoint = "app.backend.api:app"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
