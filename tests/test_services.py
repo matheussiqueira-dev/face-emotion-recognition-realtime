@@ -82,3 +82,20 @@ def test_slow_client_does_not_block_fast_client_delivery():
             await service.shutdown()
 
     asyncio.run(scenario())
+
+
+def test_metrics_count_every_label_shown_on_the_overlay():
+    """The pipeline already applies min_emotion_score to raw model output; smoothed scores can sit below
+    the threshold, and re-filtering them would drop labels the dashboard is displaying."""
+    from app.core.models import EmotionResult, FaceBox
+    from app.core.tracker import Track
+
+    service = StreamService(make_config(min_emotion_score=60.0))
+    service._loop = None  # No websocket clients: only the metrics side effect matters.
+    track = Track(id=1, box=FaceBox(0, 0, 10, 10), start_time=0.0, last_seen=0.0)
+    track.emotion = EmotionResult(dominant="happy", scores={"happy": 55.0, "sad": 45.0}, timestamp=0.0)
+
+    with service._metrics_lock:
+        service._register_metrics([track], fps=10.0)
+
+    assert service.get_metrics_snapshot()["dominant_distribution"] == {"happy": 100.0}

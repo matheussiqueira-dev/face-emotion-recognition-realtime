@@ -14,5 +14,7 @@ def serialize_track(track: Any) -> dict[str, Any]:
         serialized["emotion"] = {
             "dominant": track.emotion.dominant,
             "scores": track.emotion.scores,
+            # Model's label for the latest inference; differs from "dominant" while smoothing settles.
+            "raw_dominant": getattr(track, "raw_dominant", None) or track.emotion.dominant,
         }
     return serialized

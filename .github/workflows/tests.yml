@@ -13,6 +13,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # Lint and format need no runtime dependencies; versions match requirements-test.in.
+      - name: Install linters
+        run: python -m pip install ruff==0.17.1
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format
+        run: ruff format --check .
+
   pytest:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -23,12 +43,18 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.in
+            requirements-test.in
 
+      # Exact direct pins (requirements.in), not the ranges in requirements.txt, so CI is repeatable.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-test.in
+
+      - name: Type check
+        run: python -m mypy
 
       - name: Run tests
         run: python -m pytest -q

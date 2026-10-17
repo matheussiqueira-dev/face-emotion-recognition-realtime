@@ -1,0 +1,6 @@
+# Runtime pins plus the tools CI runs. Development extras live in requirements-dev.in.
+-r requirements.in
+pytest==9.1.1
+httpx2==2.13.1
+ruff==0.17.1
+mypy==2.4.0

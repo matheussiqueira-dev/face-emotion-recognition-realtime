@@ -47,11 +47,11 @@ class FramePipeline:
     def from_config(cls, config: AppConfig) -> "FramePipeline":
         # Imported lazily: building the analyzer imports TensorFlow and warms up the model.
         from .analyzer import EmotionAnalyzer
-        from .detector import FaceDetector
+        from .detector import create_detector
 
         return cls(
             config=config,
-            detector=FaceDetector(config.cascade_path),
+            detector=create_detector(config),
             analyzer=EmotionAnalyzer(enabled=config.enable_emotion_analysis),
         )
 
@@ -80,13 +80,33 @@ class FramePipeline:
             emotion = self.analyzer.analyze(face_img)
             track.emotion = None
             if emotion:
+                # The confidence gate applies to the model's own output, before any smoothing.
                 max_score = max(emotion.scores.values()) if emotion.scores else 0.0
                 if max_score >= self.config.min_emotion_score:
-                    track.emotion = emotion
-                    track.history.append(emotion.dominant)
+                    track.raw_dominant = emotion.dominant
+                    track.emotion = self._smooth(track, emotion)
+                    track.history.append(track.emotion.dominant)
                     if len(track.history) > 50:
                         track.history.pop(0)
         return tracks
+
+    def _smooth(self, track: Track, emotion: EmotionResult) -> EmotionResult:
+        alpha = self.config.emotion_smoothing
+        previous = track.smoothed_scores
+        if alpha <= 0.0 or not previous or not emotion.scores:
+            scores = dict(emotion.scores)
+        else:
+            labels = previous.keys() | emotion.scores.keys()
+            scores = {
+                label: alpha * previous.get(label, 0.0) + (1.0 - alpha) * emotion.scores.get(label, 0.0)
+                for label in sorted(labels)
+            }
+        track.smoothed_scores = scores
+        if not scores:
+            return emotion
+        return EmotionResult(
+            dominant=max(scores, key=scores.__getitem__), scores=scores, timestamp=emotion.timestamp
+        )
 
 
 def crop_face(frame: np.ndarray, box: FaceBox) -> np.ndarray:
