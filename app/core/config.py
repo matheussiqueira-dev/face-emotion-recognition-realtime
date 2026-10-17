@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
+FACE_DETECTORS = frozenset({"haar", "yunet"})
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -71,11 +72,20 @@ class AppConfig:
     min_neighbors: int = field(default_factory=lambda: _env_int("EMOTION_MIN_NEIGHBORS", 5))
     min_face_size: int = field(default_factory=lambda: _env_int("EMOTION_MIN_FACE_SIZE", 30))
     cascade_path: Path | None = field(default_factory=lambda: _env_path("EMOTION_CASCADE_PATH"))
+    # "haar" ships with OpenCV. "yunet" is a small CNN detector (opencv_zoo, MIT) that also finds tilted and
+    # partially turned faces; its .onnx file is not bundled, so it needs yunet_model_path.
+    face_detector: str = field(
+        default_factory=lambda: os.getenv("EMOTION_FACE_DETECTOR", "haar").strip().lower()
+    )
+    yunet_model_path: Path | None = field(default_factory=lambda: _env_path("EMOTION_YUNET_MODEL"))
 
     # Analysis Settings
     emotion_interval: float = field(default_factory=lambda: _env_float("EMOTION_INTERVAL", 0.5))
     min_emotion_score: float = field(default_factory=lambda: _env_float("EMOTION_MIN_SCORE", 0.0))
     enable_emotion_analysis: bool = field(default_factory=lambda: _env_bool("EMOTION_ENABLE_ANALYSIS", True))
+    # Exponential smoothing of per-track scores: weight kept from the previous estimate (0 = raw output).
+    # Single-frame classifications flicker; a sustained change still wins within a few inferences.
+    emotion_smoothing: float = field(default_factory=lambda: _env_float("EMOTION_SMOOTHING", 0.5))
 
     # Tracking Settings
     track_ttl: float = field(default_factory=lambda: _env_float("EMOTION_TRACK_TTL", 1.5))
@@ -104,6 +114,7 @@ class AppConfig:
             "scale_factor",
             "emotion_interval",
             "min_emotion_score",
+            "emotion_smoothing",
             "track_ttl",
             "iou_threshold",
         ):
@@ -128,6 +139,8 @@ class AppConfig:
             raise ValueError("emotion_interval must be greater than zero.")
         if not 0.0 <= self.min_emotion_score <= 100.0:
             raise ValueError("min_emotion_score must be in range [0, 100].")
+        if not 0.0 <= self.emotion_smoothing < 1.0:
+            raise ValueError("emotion_smoothing must be in range [0, 1).")
         if self.track_ttl <= 0:
             raise ValueError("track_ttl must be greater than zero.")
         if not 0.0 <= self.iou_threshold <= 1.0:
@@ -144,12 +157,21 @@ class AppConfig:
             raise ValueError("max_analyze_sessions must be >= 1.")
         if self.max_stream_clients < 1:
             raise ValueError("max_stream_clients must be >= 1.")
+        if self.face_detector not in FACE_DETECTORS:
+            raise ValueError(f"face_detector must be one of: {', '.join(sorted(FACE_DETECTORS))}.")
+        if self.face_detector == "yunet" and (
+            self.yunet_model_path is None or not self.yunet_model_path.exists()
+        ):
+            raise ValueError(
+                "face_detector 'yunet' requires yunet_model_path pointing to an existing .onnx file."
+            )
         if self.cascade_path is not None and not self.cascade_path.exists():
             raise ValueError(f"cascade_path does not exist: {self.cascade_path}")
 
     def as_dict(self, include_secrets: bool = False) -> dict[str, Any]:
         data = asdict(self)
         data["cascade_path"] = str(self.cascade_path) if self.cascade_path else None
+        data["yunet_model_path"] = str(self.yunet_model_path) if self.yunet_model_path else None
         if not include_secrets:
             data["api_read_token"] = "***" if self.api_read_token else None
             data["api_admin_token"] = "***" if self.api_admin_token else None
@@ -170,7 +192,7 @@ class AppConfig:
         parsed_updates: dict[str, Any] = {}
         for key, value in updates.items():
             parsed = value
-            if key == "cascade_path" and value is not None:
+            if key in ("cascade_path", "yunet_model_path") and value is not None:
                 parsed = Path(value)
             elif key == "cors_origins" and isinstance(value, str):
                 parsed = [item.strip() for item in value.split(",") if item.strip()]

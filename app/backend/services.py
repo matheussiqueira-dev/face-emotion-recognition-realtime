@@ -236,13 +236,14 @@ class StreamService:
         }
 
         with self._metrics_lock:
-            self._metrics.register_frame(
-                tracks=tracks,
-                fps=fps,
-                min_score=self.config.min_emotion_score,
-            )
+            self._register_metrics(tracks, fps)
 
         self._loop.call_soon_threadsafe(self._queue_payload, payload, generation)
+
+    def _register_metrics(self, tracks: list["Track"], fps: float) -> None:
+        # No min_score here: FramePipeline gates on the raw model confidence, so every label it emits is
+        # already above the threshold even when smoothing lowers the displayed scores.
+        self._metrics.register_frame(tracks=tracks, fps=fps)
 
     def _queue_payload(self, payload: dict[str, Any], generation: int) -> None:
         if generation != self._generation:

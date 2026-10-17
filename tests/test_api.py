@@ -116,3 +116,12 @@ def test_cors_does_not_allow_credentials(client):
         headers={"Origin": "https://example.com", "Access-Control-Request-Method": "GET"},
     )
     assert "access-control-allow-credentials" not in response.headers
+
+
+def test_patch_emotion_smoothing(client):
+    response = client.patch("/api/v1/config", headers=ADMIN, json={"emotion_smoothing": 0.8})
+    assert response.status_code == 200
+    assert response.json()["config"]["emotion_smoothing"] == 0.8
+
+    rejected = client.patch("/api/v1/config", headers=ADMIN, json={"emotion_smoothing": 1})
+    assert rejected.status_code == 400

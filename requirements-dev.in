@@ -1,8 +1,4 @@
--r requirements.in
-pytest==9.1.1
-httpx2==2.13.1
-ruff
-mypy
-pip-audit
-pip-tools
-playwright
+-r requirements-test.in
+pip-audit==2.10.1
+pip-tools==7.6.2
+playwright==1.64.0

@@ -15,8 +15,9 @@ class FaceBoxSchema(BaseModel):
 
 
 class EmotionSchema(BaseModel):
-    dominant: str
-    scores: dict[str, float]
+    dominant: str = Field(description="Label with the highest smoothed score (see emotion_smoothing).")
+    scores: dict[str, float] = Field(description="Per-label scores in percent, smoothed across inferences.")
+    raw_dominant: str = Field(description="Label returned by the model for the latest inference.")
 
 
 class TrackSchema(BaseModel):
@@ -28,6 +29,7 @@ class TrackSchema(BaseModel):
 class StreamFrameDataSchema(BaseModel):
     fps: float
     tracks: list[TrackSchema]
+    analysis_enabled: bool
 
 
 class StreamEnvelopeSchema(BaseModel):
@@ -72,6 +74,7 @@ class ConfigUpdateRequestSchema(BaseModel):
     emotion_interval: float | None = None
     min_emotion_score: float | None = None
     enable_emotion_analysis: bool | None = None
+    emotion_smoothing: float | None = None
     track_ttl: float | None = None
     iou_threshold: float | None = None
     max_fps: int | None = None
