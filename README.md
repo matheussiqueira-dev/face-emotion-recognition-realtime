@@ -200,7 +200,7 @@ docker compose up -d --build
 | `EMOTION_MAX_FRAME_BYTES` | Tamanho máximo de um quadro enviado pelo navegador | `2000000` |
 | `EMOTION_MAX_FRAME_PIXELS` | Resolução máxima (largura × altura) de um quadro do navegador, verificada no cabeçalho antes de decodificar | `8294400` (4K) |
 | `EMOTION_MAX_ANALYZE_SESSIONS` | Sessões simultâneas do modo câmera | `4` |
-| `EMOTION_API_READ_TOKEN` | Token para leitura (config/metrics/ws) | vazio |
+| `EMOTION_API_READ_TOKEN` | Token para leitura (config/metrics/ws). Vazio com `EMOTION_API_ADMIN_TOKEN` definido = leitura pública (demo aberta, alterações só com o token de admin) | vazio |
 | `EMOTION_API_ADMIN_TOKEN` | Token para operações administrativas | vazio |
 | `EMOTION_CORS_ORIGINS` | Origens externas permitidas (csv). Requisições autenticadas de navegador só são aceitas da mesma origem ou desta lista | vazio |
 | `EMOTION_MAX_STREAM_CLIENTS` | Clientes simultâneos no vídeo do servidor | `16` |

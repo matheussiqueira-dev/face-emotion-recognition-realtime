@@ -1,9 +1,11 @@
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
+from app.backend.analysis import BrowserAnalysisService
+from app.backend.api import create_app
 from app.backend.errors import ApiError
 from app.backend.security import Permission, authorize
-from tests.conftest import READ, make_config
+from tests.conftest import READ, fake_pipeline_factory, make_config
 
 
 def test_read_only_installation_does_not_grant_admin():
@@ -11,6 +13,35 @@ def test_read_only_installation_does_not_grant_admin():
     with pytest.raises(ApiError) as denied:
         authorize(config, "read-token", Permission.ADMIN)
     assert denied.value.status_code == 403
+
+
+def test_admin_only_installation_opens_reading_but_not_changes():
+    config = make_config(api_read_token=None)
+    assert authorize(config, None, Permission.READ).value == "anonymous"
+    with pytest.raises(ApiError) as denied:
+        authorize(config, None, Permission.ADMIN)
+    assert denied.value.status_code == 401
+    with pytest.raises(ApiError) as invalid:
+        authorize(config, "wrong", Permission.READ)
+    assert invalid.value.status_code == 401
+
+
+def test_read_token_keeps_anonymous_readers_out():
+    with pytest.raises(ApiError) as denied:
+        authorize(make_config(), None, Permission.READ)
+    assert denied.value.status_code == 401
+
+
+def test_admin_only_installation_accepts_anonymous_camera_session():
+    from fastapi.testclient import TestClient
+
+    config = make_config(api_read_token=None)
+    app = create_app(config, analysis_service=BrowserAnalysisService(config, fake_pipeline_factory(config)))
+    with TestClient(app) as public_client:
+        with public_client.websocket_connect("/api/v1/ws/analyze") as ws:
+            ws.send_json({"type": "auth", "token": ""})  # What the dashboard sends with an empty token field.
+            assert ws.receive_json()["type"] == "ready"
+        assert public_client.patch("/api/v1/config", json={"emotion_interval": 1.0}).status_code == 401
 
 
 def test_websocket_first_message_authentication(client):
