@@ -56,6 +56,38 @@ def test_yunet_requires_a_model_or_backend():
         YuNetDetector()
 
 
+def test_yunet_loads_the_onnx_model_from_memory(tmp_path, monkeypatch):
+    import cv2
+
+    model = tmp_path / "modelo_ç.onnx"  # Non-ASCII path: OpenCV's own file loader can reject it on Windows.
+    model.write_bytes(b"fake-onnx-bytes")
+    calls = []
+
+    def fake_create(framework, buffer_model, buffer_config, input_size, score, nms, top_k):
+        calls.append((framework, bytes(buffer_model), buffer_config.size, input_size, score, nms, top_k))
+        return FakeYuNet(None)
+
+    monkeypatch.setattr(cv2.FaceDetectorYN, "create", fake_create)
+    detector = YuNetDetector(model)
+
+    assert calls == [("onnx", b"fake-onnx-bytes", 0, (320, 320), 0.8, 0.3, 50)]
+    assert detector.model_path == model
+    assert detector.detect(FRAME) == []
+
+
+def test_create_detector_builds_yunet_when_configured(tmp_path, monkeypatch):
+    import cv2
+
+    from app.core.detector import create_detector
+
+    model = tmp_path / "yunet.onnx"
+    model.write_bytes(b"x")
+    monkeypatch.setattr(cv2.FaceDetectorYN, "create", lambda *args: FakeYuNet(None))
+
+    detector = create_detector(AppConfig(face_detector="yunet", yunet_model_path=model))
+    assert isinstance(detector, YuNetDetector)
+
+
 def test_config_rejects_unknown_detector_and_missing_model(tmp_path):
     with pytest.raises(ValueError):
         AppConfig(face_detector="mtcnn")
@@ -72,18 +104,21 @@ def test_yunet_detector_cannot_be_switched_through_the_api(client):
     assert response.status_code == 422
 
 
-# Opt-in check against the real model (MIT, opencv/opencv_zoo, face_detection_yunet_2023mar.onnx).
-# Not downloaded by the test suite: set EMOTION_YUNET_MODEL to a local copy to run it.
+# Opt-in check against the real model (MIT, opencv/opencv_zoo, face_detection_yunet_2023mar.onnx) and a
+# local video with a face. Neither is versioned: set EMOTION_YUNET_MODEL and EMOTION_DEMO_VIDEO to run it.
 REAL_MODEL = os.getenv("EMOTION_YUNET_MODEL")
-DEMO_VIDEO = Path(__file__).resolve().parent.parent / "Face-emotions.mp4"
+DEMO_VIDEO = Path(os.getenv("EMOTION_DEMO_VIDEO", ""))
 
 
-@pytest.mark.skipif(not REAL_MODEL, reason="EMOTION_YUNET_MODEL not set")
+@pytest.mark.skipif(
+    not (REAL_MODEL and os.getenv("EMOTION_DEMO_VIDEO")),
+    reason="EMOTION_YUNET_MODEL and EMOTION_DEMO_VIDEO not set",
+)
 def test_real_yunet_model_finds_a_face_in_the_demo_video():
     import cv2
 
-    if not DEMO_VIDEO.exists():
-        pytest.skip("demo video not present")
+    if not DEMO_VIDEO.is_file():
+        pytest.skip("EMOTION_DEMO_VIDEO does not point to a file")
     capture = cv2.VideoCapture(str(DEMO_VIDEO))
     ok, frame = capture.read()
     capture.release()

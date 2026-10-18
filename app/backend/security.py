@@ -62,6 +62,8 @@ def resolve_role(config: AppConfig, token: str | None) -> Role | None:
 def authorize(config: AppConfig, token: str | None, permission: Permission) -> Role:
     """Raise 401 when the caller is not authenticated, 403 when authenticated without the permission."""
     role = resolve_role(config, token)
+    if role is Role.ANONYMOUS and permission is Permission.READ and not config.api_read_token:
+        return role  # Admin token only (public demo): reading is open, changes still need the admin token.
     if role is None or role is Role.ANONYMOUS:
         raise ApiError(401, "Missing or invalid API token.")
     if permission is Permission.ADMIN and role is not Role.ADMIN:

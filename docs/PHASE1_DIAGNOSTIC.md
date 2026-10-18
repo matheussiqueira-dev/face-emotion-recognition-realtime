@@ -113,7 +113,7 @@ Os logs do próprio DeepFace durante o primeiro download também usam Unicode. P
 Comando local para executar com suporte a esses logs:
 
 ```powershell
-$env:EMOTION_VIDEO_SOURCE = "Face-emotions.mp4"
+$env:EMOTION_VIDEO_SOURCE = "C:\caminho\para\video.mp4"  # vídeo local, fora do repositório
 .\.venv\Scripts\python.exe -X utf8 run_api.py --host 127.0.0.1 --port 8000
 ```
 

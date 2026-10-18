@@ -47,7 +47,8 @@ def main() -> None:
                 page.locator("#session-consent").uncheck()
                 expect(page.locator("#status-badge")).to_have_text("Offline")
                 expect(page.locator("#toggle-stream")).to_be_disabled()
-                page.locator('input[name="source-mode"][value="camera"]').check()
+                # The styled span covers the radio input, so click its label as a user would.
+                page.locator('label:has(input[name="source-mode"][value="camera"])').click()
                 page.locator("#session-consent").check()
                 page.locator("#toggle-stream").click()
                 expect(page.locator("#status-badge")).to_have_text("Online · câmera", timeout=60_000)

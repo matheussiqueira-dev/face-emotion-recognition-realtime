@@ -145,8 +145,10 @@ const timelineChart = new Chart(document.getElementById("timelineChart"), {
     options: {
         responsive: true,
         maintainAspectRatio: false,
-        animation: false,
-        plugins: { legend: { display: false } },
+        // Short eased transitions: points glide to their new values instead of jumping each update.
+        animation: { duration: 400, easing: "easeOutQuart" },
+        transitions: { active: { animation: { duration: 0 } } },
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
         scales: {
             y: {
                 min: -1,
@@ -242,33 +244,74 @@ function updateButtons() {
     elements.toggleStream.classList.toggle("btn-primary", !state.isStreaming);
 }
 
+const HUD = {
+    stroke: "rgba(0, 191, 255, 0.8)",
+    faint: "rgba(0, 191, 255, 0.18)",
+    tagBackground: "rgba(2, 6, 23, 0.72)",
+    tagText: "rgba(224, 247, 255, 0.95)",
+    font: "500 11px ui-monospace, 'Cascadia Mono', Consolas, 'Courier New', monospace",
+};
+
+// Thin neon corner brackets instead of a full heavy rectangle; a faint outline keeps the box readable.
+function drawCornerBox(x, y, w, h) {
+    const corner = Math.max(6, Math.min(w, h) * 0.18);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = HUD.faint;
+    ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+
+    ctx.strokeStyle = HUD.stroke;
+    ctx.beginPath();
+    [
+        [x, y, 1, 1],
+        [x + w, y, -1, 1],
+        [x, y + h, 1, -1],
+        [x + w, y + h, -1, -1],
+    ].forEach(([cx, cy, dx, dy]) => {
+        ctx.moveTo(cx + 0.5, cy + dy * corner + 0.5);
+        ctx.lineTo(cx + 0.5, cy + 0.5);
+        ctx.lineTo(cx + dx * corner + 0.5, cy + 0.5);
+    });
+    ctx.stroke();
+}
+
+// Minimal floating tag above the face: track ID and the smoothed dominant expression only.
+function drawTrackTag(track, x, y) {
+    const emotion = track.emotion ? String(track.emotion.dominant).toLowerCase() : null;
+    const label = emotion ? `#${track.id} · ${emotion.toUpperCase()}` : `#${track.id}`;
+    ctx.font = HUD.font;
+    const padding = 6;
+    const dot = emotion ? 8 : 0;
+    const height = 18;
+    const width = Math.ceil(ctx.measureText(label).width) + padding * 2 + dot;
+    const tagX = Math.max(0, Math.min(x, ctx.canvas.width - width));
+    const tagY = y - height - 6 >= 0 ? y - height - 6 : y + 6;
+
+    ctx.fillStyle = HUD.tagBackground;
+    ctx.fillRect(tagX, tagY, width, height);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = HUD.faint;
+    ctx.strokeRect(tagX + 0.5, tagY + 0.5, width - 1, height - 1);
+
+    if (emotion) {
+        ctx.fillStyle = emotionColors[emotion] || HUD.stroke;
+        ctx.beginPath();
+        ctx.arc(tagX + padding + 2, tagY + height / 2, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.fillStyle = HUD.tagText;
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, tagX + padding + dot, tagY + height / 2 + 0.5);
+    ctx.textBaseline = "alphabetic";
+}
+
 function drawDetections(tracks) {
     tracks.forEach((track) => {
-        const { x, y, w, h } = track.box;
-        const emotion = track.emotion ? String(track.emotion.dominant).toLowerCase() : null;
-        const color = emotion && emotionColors[emotion] ? emotionColors[emotion] : "#14b8a6";
-
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
-        ctx.strokeRect(x, y, w, h);
-
-        if (!track.emotion) {
-            return;
-        }
-
-        const confidence = Math.round(Math.max(...Object.values(track.emotion.scores || {}), 0));
-        const label = `${track.emotion.dominant.toUpperCase()} ${confidence}%`;
-
-        ctx.font = "600 13px 'Segoe UI'";
-        const labelPadding = 12;
-        const labelHeight = 26;
-        const labelWidth = ctx.measureText(label).width + labelPadding * 2;
-        const labelY = Math.max(0, y - labelHeight - 6);
-
-        ctx.fillStyle = color;
-        ctx.fillRect(x, labelY, labelWidth, labelHeight);
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(label, x + labelPadding, labelY + 17);
+        const x = Math.round(track.box.x);
+        const y = Math.round(track.box.y);
+        const w = Math.round(track.box.w);
+        const h = Math.round(track.box.h);
+        drawCornerBox(x, y, w, h);
+        drawTrackTag(track, x, y);
     });
 }
 
@@ -318,8 +361,8 @@ function updateChartsFromTracks(tracks) {
         return;
     }
     state.lastChartUpdate = performance.now();
-    timelineChart.data.datasets[0].data = state.sentimentSeries;
-    timelineChart.update("none");
+    // The dataset holds the same array that was pushed/shifted above, so Chart.js diffs it in place.
+    timelineChart.update();
 
     const totalCounts = emotionLabels.reduce((sum, emotion) => sum + (state.emotionCounts[emotion] || 0), 0) || 1;
     distributionChart.data.datasets[0].data = emotionLabels.map(
@@ -724,9 +767,9 @@ async function fetchMetrics() {
             while (normalized.length < 80) {
                 normalized.unshift(0);
             }
-            state.sentimentSeries = normalized;
-            timelineChart.data.datasets[0].data = state.sentimentSeries;
-            timelineChart.update("none");
+            // Replace contents in place: the chart keeps its dataset reference and animates the change.
+            state.sentimentSeries.splice(0, state.sentimentSeries.length, ...normalized);
+            timelineChart.update();
         }
 
         if (metrics.dominant_distribution) {
