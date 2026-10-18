@@ -56,6 +56,38 @@ def test_yunet_requires_a_model_or_backend():
         YuNetDetector()
 
 
+def test_yunet_loads_the_onnx_model_from_memory(tmp_path, monkeypatch):
+    import cv2
+
+    model = tmp_path / "modelo_ç.onnx"  # Non-ASCII path: OpenCV's own file loader can reject it on Windows.
+    model.write_bytes(b"fake-onnx-bytes")
+    calls = []
+
+    def fake_create(framework, buffer_model, buffer_config, input_size, score, nms, top_k):
+        calls.append((framework, bytes(buffer_model), buffer_config.size, input_size, score, nms, top_k))
+        return FakeYuNet(None)
+
+    monkeypatch.setattr(cv2.FaceDetectorYN, "create", fake_create)
+    detector = YuNetDetector(model)
+
+    assert calls == [("onnx", b"fake-onnx-bytes", 0, (320, 320), 0.8, 0.3, 50)]
+    assert detector.model_path == model
+    assert detector.detect(FRAME) == []
+
+
+def test_create_detector_builds_yunet_when_configured(tmp_path, monkeypatch):
+    import cv2
+
+    from app.core.detector import create_detector
+
+    model = tmp_path / "yunet.onnx"
+    model.write_bytes(b"x")
+    monkeypatch.setattr(cv2.FaceDetectorYN, "create", lambda *args: FakeYuNet(None))
+
+    detector = create_detector(AppConfig(face_detector="yunet", yunet_model_path=model))
+    assert isinstance(detector, YuNetDetector)
+
+
 def test_config_rejects_unknown_detector_and_missing_model(tmp_path):
     with pytest.raises(ValueError):
         AppConfig(face_detector="mtcnn")

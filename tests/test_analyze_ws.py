@@ -97,3 +97,44 @@ def test_analyze_enforces_session_limit():
                 ) as second:
                     second.receive_json()
             assert closed.value.code == 1013
+
+
+def test_slow_inference_does_not_block_the_event_loop():
+    import asyncio
+    import threading
+    import time
+
+    from app.backend.analysis import BrowserAnalysisSession
+
+    class SlowPipeline:
+        def __init__(self):
+            self.config = make_config()
+            self.analyzer = object()
+            self.thread_ids: list[int] = []
+
+        def process(self, frame):
+            self.thread_ids.append(threading.get_ident())
+            time.sleep(0.3)  # Stands in for a blocking TensorFlow forward pass.
+            return []
+
+    pipeline = SlowPipeline()
+    session = BrowserAnalysisSession(pipeline, max_frame_bytes=2_000_000, max_frame_pixels=1_000_000)
+
+    async def scenario() -> int:
+        ticks = 0
+
+        async def ticker():
+            nonlocal ticks
+            while True:
+                await asyncio.sleep(0.01)
+                ticks += 1
+
+        task = asyncio.create_task(ticker())
+        await asyncio.gather(session.analyze(_jpeg()), session.analyze(_jpeg()))
+        task.cancel()
+        return ticks
+
+    ticks = asyncio.run(scenario())
+    # Inline on the loop this would be ~0 ticks; off the loop the ticker keeps running during inference.
+    assert ticks >= 10
+    assert threading.get_ident() not in pipeline.thread_ids
