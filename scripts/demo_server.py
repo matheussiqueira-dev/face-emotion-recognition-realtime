@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @contextmanager
-def demo_server() -> Iterator[tuple[str, str, Path]]:
+def demo_server(extra_env: dict[str, str] | None = None) -> Iterator[tuple[str, str, Path]]:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -33,6 +33,7 @@ def demo_server() -> Iterator[tuple[str, str, Path]]:
         "EMOTION_API_READ_TOKEN": token,
         "EMOTION_API_ADMIN_TOKEN": secrets.token_urlsafe(32),
         "EMOTION_CORS_ORIGINS": "",
+        **(extra_env or {}),
     }
     with log_path.open("w", encoding="utf-8") as log:
         process = subprocess.Popen(

@@ -41,3 +41,10 @@ def test_auth_enabled_reflects_tokens():
 def test_config_rejects_non_finite_timing(value):
     with pytest.raises(ValueError, match="finite"):
         AppConfig(emotion_interval=value)
+
+
+def test_emotion_smoothing_must_be_in_unit_interval():
+    assert AppConfig(emotion_smoothing=0.0).emotion_smoothing == 0.0
+    for invalid in (-0.1, 1.0, float("nan")):
+        with pytest.raises(ValueError):
+            AppConfig(emotion_smoothing=invalid)

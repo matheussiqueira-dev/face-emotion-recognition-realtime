@@ -269,6 +269,7 @@ def create_app(config=None, stream_service=None, analysis_service=None) -> FastA
 def _matches(candidate: str, expected: str | None) -> bool:
     return bool(expected) and hmac.compare_digest(candidate.encode(), expected.encode())
 
+
 def authorize(config, token, permission: Permission) -> Role:
     role = resolve_role(config, token)
     if role is None or role is Role.ANONYMOUS:
@@ -284,7 +285,9 @@ def authorize(config, token, permission: Permission) -> Role:
 async def _handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
     request_id = _request_id(request)
     LOGGER.exception("Unhandled error (request_id=%s)", request_id)  # detalhe só no log
-    return JSONResponse(status_code=500, content=error_body("internal_error", "Unexpected server error.", request_id))
+    return JSONResponse(
+        status_code=500, content=error_body("internal_error", "Unexpected server error.", request_id)
+    )
 ```
 
 ### 6.5 Tempo real — modo câmera (`app/backend/websockets.py`)
@@ -296,7 +299,7 @@ async def websocket_analyze(websocket: WebSocket) -> None:
         return
     await websocket.accept()
     try:
-        async with state.analysis_service.session() as session:   # limite de sessões
+        async with state.analysis_service.session() as session:  # limite de sessões
             await websocket.send_json({"type": "ready"})
             while True:
                 message = await websocket.receive()
@@ -375,6 +378,7 @@ def token_from_subprotocols(websocket: WebSocket) -> str | None:
             return protocol.removeprefix("bearer.") or None
     return None
 
+
 # Após autorizar: o servidor precisa aceitar um subprotocolo oferecido pelo cliente.
 await websocket.accept(subprotocol="emotionai.v1")
 ```
@@ -386,6 +390,7 @@ def sign_webhook(secret: bytes, timestamp: int, body: bytes) -> str:
     digest = hmac.new(secret, f"{timestamp}.".encode() + body, hashlib.sha256).hexdigest()
     return f"t={timestamp},v1={digest}"
 
+
 async def deliver_webhook(url: str, secret: bytes, event: dict) -> None:
     body = json.dumps(event, separators=(",", ":")).encode()
     timestamp = int(time.time())
@@ -393,7 +398,10 @@ async def deliver_webhook(url: str, secret: bytes, event: dict) -> None:
         response = await client.post(
             url,
             content=body,
-            headers={"Content-Type": "application/json", "X-EmotionAI-Signature": sign_webhook(secret, timestamp, body)},
+            headers={
+                "Content-Type": "application/json",
+                "X-EmotionAI-Signature": sign_webhook(secret, timestamp, body),
+            },
         )
         response.raise_for_status()
 ```
@@ -412,6 +420,7 @@ class YuNetDetector:
         if faces is None:
             return []
         return [FaceBox(int(x), int(y), int(w), int(h)) for x, y, w, h in faces[:, :4]]
+
 
 # Uso: FramePipeline(config, detector=YuNetDetector(Path("models/face_detection_yunet.onnx")), analyzer=...)
 ```

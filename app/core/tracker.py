@@ -1,6 +1,6 @@
 import time
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 from .models import EmotionResult, FaceBox
 
@@ -14,6 +14,9 @@ class Track:
     last_analyzed: float = 0.0
     emotion: Optional[EmotionResult] = None
     history: List[str] = field(default_factory=list)
+    # Smoothed scores carried between inferences, and the latest unsmoothed label for transparency.
+    smoothed_scores: Optional[Dict[str, float]] = None
+    raw_dominant: Optional[str] = None
 
 
 class FaceTracker:
@@ -29,27 +32,36 @@ class FaceTracker:
         now = time.time() if now is None else now
         # Expire before matching, otherwise a face can resurrect an already expired track.
         self.tracks = [track for track in self.tracks if now - track.last_seen <= self.ttl]
-        active_tracks = []
-        unused_detections = list(detections)
+        active_tracks: List[Track] = []
+        detection_list = list(detections)
 
-        # Match existing tracks to new detections
-        for track in self.tracks:
-            best_iou = 0.0
-            best_det_idx = -1
-
-            for i, det in enumerate(unused_detections):
-                score = self._calculate_iou(track.box, det)
-                if score > best_iou:
-                    best_iou = score
-                    best_det_idx = i
-
-            if best_det_idx != -1 and best_iou >= self.iou_threshold:
-                det = unused_detections.pop(best_det_idx)
-                track.box = det
-                track.last_seen = now
-                active_tracks.append(track)
+        # Global greedy matching: take track/detection pairs from the highest overlap down. Matching one
+        # track at a time lets an older track take a box that belongs to its neighbour, swapping IDs and
+        # mixing per-track state (smoothed scores). A handful of faces keeps the pair list tiny.
+        candidates = sorted(
+            (
+                (iou, track_idx, det_idx)
+                for track_idx, track in enumerate(self.tracks)
+                for det_idx, det in enumerate(detection_list)
+                if (iou := self._calculate_iou(track.box, det)) >= self.iou_threshold
+            ),
+            key=lambda candidate: candidate[0],
+            reverse=True,
+        )
+        matched_tracks: set[int] = set()
+        matched_detections: set[int] = set()
+        for _, track_idx, det_idx in candidates:
+            if track_idx in matched_tracks or det_idx in matched_detections:
+                continue
+            matched_tracks.add(track_idx)
+            matched_detections.add(det_idx)
+            track = self.tracks[track_idx]
+            track.box = detection_list[det_idx]
+            track.last_seen = now
+            active_tracks.append(track)
 
         # Create new tracks for unmatched detections
+        unused_detections = [det for i, det in enumerate(detection_list) if i not in matched_detections]
         for det in unused_detections:
             new_track = Track(id=self._next_id, box=det, start_time=now, last_seen=now)
             self._next_id += 1
@@ -59,7 +71,7 @@ class FaceTracker:
         # Cleanup expired tracks
         self.tracks = [t for t in self.tracks if (now - t.last_seen) <= self.ttl]
 
-        return active_tracks
+        return sorted(active_tracks, key=lambda track: track.id)
 
     @staticmethod
     def _calculate_iou(boxA: FaceBox, boxB: FaceBox) -> float:

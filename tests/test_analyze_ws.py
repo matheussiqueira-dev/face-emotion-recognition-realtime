@@ -34,6 +34,7 @@ def test_analyze_returns_tracks_for_uploaded_frame(client):
     [track] = result["tracks"]
     assert track["box"] == {"x": 10, "y": 10, "w": 40, "h": 40}
     assert track["emotion"]["dominant"] == "happy"
+    assert track["emotion"]["raw_dominant"] == "happy"
 
 
 def test_analyze_rejects_undecodable_and_oversized_frames(client):
