@@ -104,18 +104,21 @@ def test_yunet_detector_cannot_be_switched_through_the_api(client):
     assert response.status_code == 422
 
 
-# Opt-in check against the real model (MIT, opencv/opencv_zoo, face_detection_yunet_2023mar.onnx).
-# Not downloaded by the test suite: set EMOTION_YUNET_MODEL to a local copy to run it.
+# Opt-in check against the real model (MIT, opencv/opencv_zoo, face_detection_yunet_2023mar.onnx) and a
+# local video with a face. Neither is versioned: set EMOTION_YUNET_MODEL and EMOTION_DEMO_VIDEO to run it.
 REAL_MODEL = os.getenv("EMOTION_YUNET_MODEL")
-DEMO_VIDEO = Path(__file__).resolve().parent.parent / "Face-emotions.mp4"
+DEMO_VIDEO = Path(os.getenv("EMOTION_DEMO_VIDEO", ""))
 
 
-@pytest.mark.skipif(not REAL_MODEL, reason="EMOTION_YUNET_MODEL not set")
+@pytest.mark.skipif(
+    not (REAL_MODEL and os.getenv("EMOTION_DEMO_VIDEO")),
+    reason="EMOTION_YUNET_MODEL and EMOTION_DEMO_VIDEO not set",
+)
 def test_real_yunet_model_finds_a_face_in_the_demo_video():
     import cv2
 
-    if not DEMO_VIDEO.exists():
-        pytest.skip("demo video not present")
+    if not DEMO_VIDEO.is_file():
+        pytest.skip("EMOTION_DEMO_VIDEO does not point to a file")
     capture = cv2.VideoCapture(str(DEMO_VIDEO))
     ok, frame = capture.read()
     capture.release()

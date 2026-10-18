@@ -5,7 +5,7 @@ import os
 from urllib.request import Request, urlopen
 
 import cv2
-from demo_server import ROOT, demo_server
+from demo_server import ROOT, demo_server, demo_video
 from websockets.sync.client import connect
 
 
@@ -19,7 +19,7 @@ def main() -> None:
             assert all(frame["frame"] and frame["data"]["tracks"] for frame in frames)
             assert any(track["emotion"] for track in frames[-1]["data"]["tracks"])
 
-        cap = cv2.VideoCapture("Face-emotions.mp4")
+        cap = cv2.VideoCapture(str(demo_video()))
         try:
             ok, frame = cap.read()
             assert ok, "Demo frame could not be read"

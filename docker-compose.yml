@@ -6,7 +6,7 @@ services:
       # Bound to localhost only: API tokens are empty by default.
       - "127.0.0.1:${HOST_PORT:-8001}:8000"
     environment:
-      EMOTION_VIDEO_SOURCE: /videos/${VIDEO_FILE:-Face-emotions.mp4}
+      EMOTION_VIDEO_SOURCE: /videos/${VIDEO_FILE:-demo.mp4}
       EMOTION_API_READ_TOKEN: ${EMOTION_API_READ_TOKEN:-}
       EMOTION_API_ADMIN_TOKEN: ${EMOTION_API_ADMIN_TOKEN:-}
     volumes:

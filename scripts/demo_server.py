@@ -17,6 +17,17 @@ from urllib.request import urlopen
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def demo_video() -> Path:
+    """Local video with a visible face, kept outside the repository (EMOTION_DEMO_VIDEO)."""
+    value = os.getenv("EMOTION_DEMO_VIDEO")
+    if not value:
+        raise SystemExit("Set EMOTION_DEMO_VIDEO to a local video file that shows a face.")
+    path = Path(value).expanduser().resolve()
+    if not path.is_file():
+        raise SystemExit(f"EMOTION_DEMO_VIDEO does not point to a file: {path}")
+    return path
+
+
 @contextmanager
 def demo_server(extra_env: dict[str, str] | None = None) -> Iterator[tuple[str, str, Path]]:
     with socket.socket() as sock:
@@ -29,7 +40,7 @@ def demo_server(extra_env: dict[str, str] | None = None) -> Iterator[tuple[str, 
     env = {
         **os.environ,
         "PYTHONUTF8": "1",
-        "EMOTION_VIDEO_SOURCE": "Face-emotions.mp4",
+        "EMOTION_VIDEO_SOURCE": str(demo_video()),
         "EMOTION_API_READ_TOKEN": token,
         "EMOTION_API_ADMIN_TOKEN": secrets.token_urlsafe(32),
         "EMOTION_CORS_ORIGINS": "",

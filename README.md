@@ -165,7 +165,7 @@ mkdir models
 curl -L -o models/face_detection_yunet_2023mar.onnx https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
 ```
 
-Depois inicie com `EMOTION_FACE_DETECTOR=yunet` e `EMOTION_YUNET_MODEL=models/face_detection_yunet_2023mar.onnx`. Um caminho relativo é resolvido a partir do diretório em que o servidor é iniciado; se o arquivo não existir, a aplicação recusa iniciar com uma mensagem explícita. Para validar com o vídeo de demonstração: `EMOTION_YUNET_MODEL=models/face_detection_yunet_2023mar.onnx pytest tests/test_yunet_detector.py`.
+Depois inicie com `EMOTION_FACE_DETECTOR=yunet` e `EMOTION_YUNET_MODEL=models/face_detection_yunet_2023mar.onnx`. Um caminho relativo é resolvido a partir do diretório em que o servidor é iniciado; se o arquivo não existir, a aplicação recusa iniciar com uma mensagem explícita. Para validar com um vídeo local que mostre um rosto: `EMOTION_YUNET_MODEL=models/face_detection_yunet_2023mar.onnx EMOTION_DEMO_VIDEO=<vídeo> pytest tests/test_yunet_detector.py`.
 
 Comparação no vídeo de demonstração (detalhes em [VALIDATION_REPORT](docs/VALIDATION_REPORT.md)): para rostos frontais, os dois detectores acertam; o YuNet é mais rápido e tolera inclinações de até ~30°, mas não detectou o rosto girado a 45°. O padrão continua `haar`.
 
@@ -178,7 +178,7 @@ docker compose up -d --build
 ```
 
 - Interface: `http://127.0.0.1:8001` (porta do host configurável com `HOST_PORT`).
-- Vídeo: por padrão `Face-emotions.mp4` da raiz do projeto. Para outro arquivo, defina `VIDEO_DIR` (pasta) e `VIDEO_FILE` (nome).
+- Vídeo: o repositório não inclui vídeo de demonstração. Por padrão o container lê `demo.mp4` da raiz do projeto (ignorado pelo Git); para outro arquivo, defina `VIDEO_DIR` (pasta) e `VIDEO_FILE` (nome). Sem vídeo, use o modo "Minha câmera" no navegador.
 - Os pesos do DeepFace são baixados no primeiro stream e ficam no volume `deepface-models`.
 - Testes no container: `docker compose run --rm emotionai python -m pytest -q`.
 
@@ -239,9 +239,10 @@ pip install -r requirements-test.in
 ruff check . && ruff format --check . && mypy && pytest -q
 ```
 
-Verificações opcionais com o modelo real (baixam pesos do DeepFace se ausentes, sobem um servidor em loopback e nunca abrem câmera física):
+Verificações opcionais com o modelo real (baixam pesos do DeepFace se ausentes, sobem um servidor em loopback e nunca abrem câmera física). Exigem um vídeo local com um rosto visível, fora do repositório, indicado em `EMOTION_DEMO_VIDEO`:
 
 ```bash
+export EMOTION_DEMO_VIDEO=/caminho/para/video.mp4
 cd scripts
 python -X utf8 verify_demo.py
 python -X utf8 measure_smoothing.py 600 0.5
